@@ -1,12 +1,14 @@
 # nervoussystemprotect (Model NSP-1)
 
+## 🛡️ About: The Voice Stress Firewall
+
 > **A real-time stress firewall for meetings, calls, and audio recordings.**
 >
 > Most human stress, anxiety, and interpersonal tension are unconsciously transmitted through subtle micro-acoustic cues in the human voice: harsh transients, sharp high-frequency resonance, tense vocal fry, and unpredictable pitch spikes.
 >
-> For **neuroatypical (ADHD, autistic, sensory-sensitive, HSP)** and chronically fatigued individuals, prolonged exposure to these raw acoustic signals in remote meetings (Zoom, Google Meet, Teams) triggers sympathetic nervous system arousal ("fight-or-flight"), sensory overload, and cognitive exhaustion.
+> For **neuroatypical (ADHD, autistic, sensory-sensitive, HSP)** and chronically fatigued individuals, prolonged exposure to these raw acoustic signals in remote meetings (Zoom, Google Meet, Teams) and recorded playback triggers sympathetic nervous system arousal ("fight-or-flight"), sensory overload, and cognitive exhaustion.
 >
-> **`nervoussystemprotect`** functions as an **in-line acoustic stress firewall**. Operating directly on macOS audio streams with sub-millisecond latency, it de-escalates stressful acoustic characteristics via warm Butterworth filtering, harmonic pitch dampening, and MLX neural tone color conversion—protecting your nervous system without degrading speech intelligibility or meeting presence.
+> **`nervoussystemprotect`** functions as an **in-line acoustic stress firewall**. Operating directly on macOS audio streams with sub-millisecond latency, it de-escalates stressful acoustic characteristics via warm Butterworth filtering, harmonic pitch dampening, and MLX neural tone color conversion—protecting your nervous system from stress transmission without degrading speech intelligibility or meeting presence.
 
 ---
 
