@@ -12,6 +12,11 @@ public struct VoiceChangerView: View {
         self.controller = controller
     }
 
+    private var downloadPercentText: String {
+        let pct = Int(controller.downloadProgress * 100.0)
+        return "\(pct)%"
+    }
+
     public var body: some View {
         VStack(spacing: 12) {
             // Header: Title & Start/Stop Controls
@@ -107,298 +112,364 @@ public struct VoiceChangerView: View {
 
             // MAIN CONTROLS ROW
             HStack(alignment: .top, spacing: 12) {
-                // PANEL 1: Voice Character & Details
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "person.crop.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(SynthTheme.ledCyan)
-
-                        Text("VOICE CHARACTER")
-                            .font(.system(size: 9, weight: .bold, design: .default))
-                            .foregroundColor(SynthTheme.sectionHeader)
-                            .tracking(0.6)
-
-                        Spacer()
-
-                        Button(action: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
-                                isShowingModelDetails.toggle()
-                            }
-                        }) {
-                            HStack(spacing: 3) {
-                                Text(isShowingModelDetails ? "Hide Files" : "Details")
-                                    .font(.system(size: 8, weight: .semibold, design: .default))
-                                Image(systemName: isShowingModelDetails ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 7, weight: .bold))
-                            }
-                            .foregroundColor(SynthTheme.textDim)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2.5)
-                            .background(Color.white.opacity(0.05))
-                            .cornerRadius(4)
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    // Character Selector Menu
-                    Menu {
-                        ForEach(AudioController.availableCharacters) { char in
-                            Button(action: { controller.selectedCharacter = char }) {
-                                HStack {
-                                    Text(char.name)
-                                    if controller.selectedCharacter.id == char.id {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack {
-                            Text(controller.selectedCharacter.name)
-                                .font(.system(size: 11, weight: .semibold, design: .default))
-                                .foregroundColor(SynthTheme.textBright)
-                            Spacer()
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(SynthTheme.textDim)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(Color.black.opacity(0.4))
-                        .cornerRadius(6)
-                        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.08), lineWidth: 1))
-                    }
-                    .menuStyle(.borderlessButton)
-
-                    Text(controller.selectedCharacter.description)
-                        .font(.system(size: 8.5, weight: .regular, design: .default))
-                        .foregroundColor(SynthTheme.textDim)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.vertical, 2)
-
-                    // Collapsible Weight Files & Component Readiness
-                    if isShowingModelDetails {
-                        VStack(alignment: .leading, spacing: 4) {
-                            componentStatusRow(name: "Voice Profile", file: controller.selectedCharacter.speakerEmbeddingFileName, ready: controller.loadedComponents.synth)
-                            componentStatusRow(name: "Tone Checkpoint", file: "checkpoint.pth", ready: controller.loadedComponents.hubert)
-                            componentStatusRow(name: "Converter Config", file: "config.json", ready: controller.loadedComponents.rmvpe)
-
-                            HStack {
-                                Spacer()
-                                if controller.isDownloading {
-                                    HStack(spacing: 4) {
-                                        ProgressView().scaleEffect(0.5).frame(width: 12, height: 12)
-                                        Text(String(format: "%.0f%%", controller.downloadProgress * 100))
-                                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                                            .foregroundColor(SynthTheme.ledAmber)
-                                        Button("Cancel") { controller.cancelDownload() }
-                                            .buttonStyle(.plain)
-                                            .font(.system(size: 7.5, weight: .bold))
-                                            .foregroundColor(Color.red)
-                                    }
-                                } else {
-                                    Button(action: { controller.downloadNeuralWeights() }) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "arrow.triangle.2.circlepath")
-                                            Text(controller.isNeuralModelLoaded ? "Verify Weights" : "Download Now")
-                                        }
-                                        .font(.system(size: 7.5, weight: .bold, design: .default))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(SynthTheme.ledCyan.opacity(0.15))
-                                        .cornerRadius(4)
-                                        .foregroundColor(SynthTheme.ledCyan)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            .padding(.top, 2)
-                        }
-                        .padding(8)
-                        .background(Color.black.opacity(0.35))
-                        .cornerRadius(6)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [SynthTheme.panelPlate, Color(red: 0.08, green: 0.09, blue: 0.12)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                )
-
-                // PANEL 2: Performance Sliders (Pitch Shift, Index Rate, Silence Gate)
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 10))
-                            .foregroundColor(SynthTheme.ledAmber)
-
-                        Text("PERFORMANCE CONTROLS")
-                            .font(.system(size: 9, weight: .bold, design: .default))
-                            .foregroundColor(SynthTheme.sectionHeader)
-                            .tracking(0.6)
-                    }
-
-                    // Pitch Shift Slider
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("Pitch Shift")
-                                .font(.system(size: 8.5, weight: .semibold, design: .default))
-                                .foregroundColor(SynthTheme.textDim)
-                            Spacer()
-                            Text(String(format: "%+.0f st", controller.pitchShiftSemitones))
-                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                                .foregroundColor(SynthTheme.ledPurple)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { controller.pitchShiftSemitones },
-                                set: { controller.pitchShiftSemitones = round($0) }
-                            ),
-                            in: -12.0...12.0
-                        )
-                        .accentColor(SynthTheme.ledPurple)
-                    }
-
-                    // Tone Color Strength (Tau) Slider
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("Tone Color Strength (Tau)")
-                                .font(.system(size: 8.5, weight: .semibold, design: .default))
-                                .foregroundColor(SynthTheme.textDim)
-                            Spacer()
-                            Text(String(format: "%.2f", controller.toneColorTau))
-                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                                .foregroundColor(SynthTheme.ledAmber)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { controller.toneColorTau },
-                                set: { controller.toneColorTau = round($0 * 20.0) / 20.0 }
-                            ),
-                            in: 0.05...1.0
-                        )
-                        .accentColor(SynthTheme.ledAmber)
-                    }
-
-                    // Silence Gate (Noise Gate) Slider
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack {
-                            Text("Silence Gate")
-                                .font(.system(size: 8.5, weight: .semibold, design: .default))
-                                .foregroundColor(SynthTheme.textDim)
-                            Spacer()
-                            Text(controller.silenceThreshold <= 0.0001 ? "OFF" : String(format: "%.4f", controller.silenceThreshold))
-                                .font(.system(size: 9, weight: .bold, design: .rounded))
-                                .foregroundColor(controller.silenceThreshold <= 0.0001 ? SynthTheme.textDim : SynthTheme.ledGreen)
-                        }
-
-                        Slider(
-                            value: Binding(
-                                get: { controller.silenceThreshold },
-                                set: { controller.silenceThreshold = round($0 * 2000.0) / 2000.0 }
-                            ),
-                            in: 0.000...0.015
-                        )
-                        .accentColor(SynthTheme.ledGreen)
-
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(controller.isVoiceActive ? SynthTheme.ledGreen : Color.white.opacity(0.2))
-                                .frame(width: 6, height: 6)
-                                .shadow(color: controller.isVoiceActive ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
-
-                            Text(controller.isVoiceActive ? "VOICE DETECTED" : "GATE CLOSED")
-                                .font(.system(size: 8, weight: .bold, design: .default))
-                                .foregroundColor(controller.isVoiceActive ? SynthTheme.ledGreen : SynthTheme.textDim)
-
-                            Spacer()
-
-                            Text(String(format: "Mic: %.4f", controller.rawInputRMS))
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
-                                .foregroundColor(SynthTheme.textDim)
-                        }
-                        .padding(.top, 2)
-                    }
-
-                    Spacer(minLength: 0)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [SynthTheme.panelPlate, Color(red: 0.08, green: 0.09, blue: 0.12)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                )
-
-                // PANEL 3: I/O Level Indicators
-                VStack(spacing: 8) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chart.bar.fill")
-                            .font(.system(size: 9))
-                            .foregroundColor(SynthTheme.ledGreen)
-
-                        Text("LEVELS")
-                            .font(.system(size: 9, weight: .bold, design: .default))
-                            .foregroundColor(SynthTheme.sectionHeader)
-                            .tracking(0.6)
-                    }
-
-                    HStack(spacing: 14) {
-                        LevelBar(title: "MIC", level: controller.inputLevel, color: SynthTheme.ledCyan)
-                        LevelBar(
-                            title: "VOICE",
-                            level: controller.outputLevel,
-                            color: controller.isNeuralModelLoaded ? SynthTheme.ledPurple : Color.red.opacity(0.3),
-                            subtitle: !controller.isNeuralModelLoaded ? "MUTED" : nil
-                        )
-                    }
-                    .padding(.top, 4)
-
-                    Spacer(minLength: 0)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [SynthTheme.panelPlate, Color(red: 0.08, green: 0.09, blue: 0.12)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                        )
-                )
+                characterPanel
+                performancePanel
+                levelsPanel
             }
         }
+    }
+
+    // MARK: - Subpanels
+
+    @ViewBuilder
+    private var characterHeader: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "person.crop.circle.fill")
+                .font(.system(size: 10))
+                .foregroundColor(SynthTheme.ledCyan)
+
+            Text("VOICE CHARACTER")
+                .font(.system(size: 9, weight: .bold, design: .default))
+                .foregroundColor(SynthTheme.sectionHeader)
+                .tracking(0.6)
+
+            Spacer()
+
+            Button(action: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                    isShowingModelDetails.toggle()
+                }
+            }) {
+                HStack(spacing: 3) {
+                    Text(isShowingModelDetails ? "Hide Files" : "Details")
+                        .font(.system(size: 8, weight: .semibold, design: .default))
+                    Image(systemName: isShowingModelDetails ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 7, weight: .bold))
+                }
+                .foregroundColor(SynthTheme.textDim)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(4)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var characterSelectorMenu: some View {
+        Menu {
+            ForEach(AudioController.availableCharacters) { char in
+                Button(action: { controller.selectedCharacter = char }) {
+                    if controller.selectedCharacter.id == char.id {
+                        Label(char.name, systemImage: "checkmark")
+                    } else {
+                        Text(char.name)
+                    }
+                }
+            }
+        } label: {
+            HStack {
+                Text(controller.selectedCharacter.name)
+                    .font(.system(size: 11, weight: .semibold, design: .default))
+                    .foregroundColor(SynthTheme.textBright)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(SynthTheme.textDim)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.4))
+            .cornerRadius(6)
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.08), lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+    }
+
+    @ViewBuilder
+    private var modelDetailsBox: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            componentStatusRow(name: "Voice Profile", file: controller.selectedCharacter.speakerEmbeddingFileName, ready: controller.loadedComponents.synth)
+            componentStatusRow(name: "Tone Checkpoint", file: "checkpoint.pth", ready: controller.loadedComponents.hubert)
+            componentStatusRow(name: "Converter Config", file: "config.json", ready: controller.loadedComponents.rmvpe)
+
+            HStack {
+                Spacer()
+                if controller.isDownloading {
+                    HStack(spacing: 4) {
+                        ProgressView().scaleEffect(0.5).frame(width: 12, height: 12)
+                        Text(downloadPercentText)
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(SynthTheme.ledAmber)
+                        Button("Cancel") { controller.cancelDownload() }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 7.5, weight: .bold))
+                            .foregroundColor(Color.red)
+                    }
+                } else {
+                    Button(action: { controller.downloadNeuralWeights() }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text(controller.isNeuralModelLoaded ? "Verify Weights" : "Download Now")
+                        }
+                        .font(.system(size: 7.5, weight: .bold, design: .default))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(SynthTheme.ledCyan.opacity(0.15))
+                        .cornerRadius(4)
+                        .foregroundColor(SynthTheme.ledCyan)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 2)
+        }
+        .padding(8)
+        .background(Color.black.opacity(0.35))
+        .cornerRadius(6)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    @ViewBuilder
+    private var neuralMeshLattice: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.black.opacity(0.35))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(SynthTheme.ledPurple.opacity(0.25), lineWidth: 1)
+                )
+
+            NeuralMeshView(
+                calmLevel: 0.5,
+                isVoiceActive: controller.isVoiceActive,
+                activityRMS: controller.inputLevel,
+                accentColor: SynthTheme.ledPurple
+            )
+            .padding(6)
+
+            VStack {
+                HStack {
+                    Spacer()
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(controller.isVoiceActive ? SynthTheme.ledCyan : SynthTheme.ledPurple.opacity(0.7))
+                            .frame(width: 5, height: 5)
+                        Text(controller.isVoiceActive ? "ACTIVE RESONANCE" : "DORMANT LATTICE")
+                            .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                            .foregroundColor(SynthTheme.textDim)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.55))
+                    .cornerRadius(4)
+                }
+                Spacer()
+            }
+            .padding(6)
+        }
+        .frame(height: 130)
+    }
+
+    @ViewBuilder
+    private var characterPanel: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            characterHeader
+            characterSelectorMenu
+
+            Text(controller.selectedCharacter.description)
+                .font(.system(size: 8.5, weight: .regular, design: .default))
+                .foregroundColor(SynthTheme.textDim)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.vertical, 2)
+
+            if isShowingModelDetails {
+                modelDetailsBox
+            }
+
+            neuralMeshLattice
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [SynthTheme.panelPlate, Color(red: 0.08, green: 0.09, blue: 0.12)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
+    @ViewBuilder
+    private var performancePanel: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 5) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 10))
+                    .foregroundColor(SynthTheme.ledAmber)
+
+                Text("PERFORMANCE CONTROLS")
+                    .font(.system(size: 9, weight: .bold, design: .default))
+                    .foregroundColor(SynthTheme.sectionHeader)
+                    .tracking(0.6)
+            }
+
+            // Pitch Shift Slider
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text("Pitch Shift")
+                        .font(.system(size: 8.5, weight: .semibold, design: .default))
+                        .foregroundColor(SynthTheme.textDim)
+                    Spacer()
+                    Text(String(format: "%+.0f st", controller.pitchShiftSemitones))
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .foregroundColor(SynthTheme.ledPurple)
+                }
+
+                Slider(
+                    value: Binding(
+                        get: { controller.pitchShiftSemitones },
+                        set: { controller.pitchShiftSemitones = round($0) }
+                    ),
+                    in: -12.0...12.0
+                )
+                .accentColor(SynthTheme.ledPurple)
+            }
+
+            // Tone Color Strength (Tau) Slider
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text("Tone Color Strength (Tau)")
+                        .font(.system(size: 8.5, weight: .semibold, design: .default))
+                        .foregroundColor(SynthTheme.textDim)
+                    Spacer()
+                    Text(String(format: "%.2f", controller.toneColorTau))
+                        .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                        .foregroundColor(SynthTheme.ledAmber)
+                }
+
+                Slider(
+                    value: Binding(
+                        get: { controller.toneColorTau },
+                        set: { controller.toneColorTau = round($0 * 20.0) / 20.0 }
+                    ),
+                    in: 0.05...1.0
+                )
+                .accentColor(SynthTheme.ledAmber)
+            }
+
+            // Silence Gate (Noise Gate) Slider
+            VStack(alignment: .leading, spacing: 3) {
+                HStack {
+                    Text("Silence Gate")
+                        .font(.system(size: 8.5, weight: .semibold, design: .default))
+                        .foregroundColor(SynthTheme.textDim)
+                    Spacer()
+                    Text(controller.silenceThreshold <= 0.0001 ? "OFF" : String(format: "%.4f", controller.silenceThreshold))
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                        .foregroundColor(controller.silenceThreshold <= 0.0001 ? SynthTheme.textDim : SynthTheme.ledGreen)
+                }
+
+                Slider(
+                    value: Binding(
+                        get: { controller.silenceThreshold },
+                        set: { controller.silenceThreshold = round($0 * 2000.0) / 2000.0 }
+                    ),
+                    in: 0.000...0.015
+                )
+                .accentColor(SynthTheme.ledGreen)
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(controller.isVoiceActive ? SynthTheme.ledGreen : Color.white.opacity(0.2))
+                        .frame(width: 6, height: 6)
+                        .shadow(color: controller.isVoiceActive ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
+
+                    Text(controller.isVoiceActive ? "VOICE DETECTED" : "GATE CLOSED")
+                        .font(.system(size: 8, weight: .bold, design: .default))
+                        .foregroundColor(controller.isVoiceActive ? SynthTheme.ledGreen : SynthTheme.textDim)
+
+                    Spacer()
+
+                    Text(String(format: "Mic: %.4f", controller.rawInputRMS))
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(SynthTheme.textDim)
+                }
+                .padding(.top, 2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [SynthTheme.panelPlate, Color(red: 0.08, green: 0.09, blue: 0.12)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
+    }
+
+    @ViewBuilder
+    private var levelsPanel: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 4) {
+                Image(systemName: "chart.bar.fill")
+                    .font(.system(size: 9))
+                    .foregroundColor(SynthTheme.ledGreen)
+
+                Text("LEVELS")
+                    .font(.system(size: 9, weight: .bold, design: .default))
+                    .foregroundColor(SynthTheme.sectionHeader)
+                    .tracking(0.6)
+            }
+
+            HStack(spacing: 14) {
+                LevelBar(title: "MIC", level: controller.inputLevel, color: SynthTheme.ledCyan)
+                LevelBar(
+                    title: "VOICE",
+                    level: controller.outputLevel,
+                    color: controller.isNeuralModelLoaded ? SynthTheme.ledPurple : Color.red.opacity(0.3),
+                    subtitle: !controller.isNeuralModelLoaded ? "MUTED" : nil
+                )
+            }
+            .padding(.top, 4)
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [SynthTheme.panelPlate, Color(red: 0.08, green: 0.09, blue: 0.12)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+        )
     }
 
     private func componentStatusRow(name: String, file: String, ready: Bool, isOptional: Bool = false) -> some View {
