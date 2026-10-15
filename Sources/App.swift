@@ -96,6 +96,28 @@ struct NervousSystemProtectApp: App {
             }
         }
 
+        if let idx = CommandLine.arguments.firstIndex(of: "--openvoice"), idx + 2 < CommandLine.arguments.count {
+            let inPath = CommandLine.arguments[idx + 1]
+            let outPath = CommandLine.arguments[idx + 2]
+            let refPath = (idx + 3 < CommandLine.arguments.count) ? CommandLine.arguments[idx + 3] : ""
+            let refURL = refPath.isEmpty ? nil : URL(fileURLWithPath: refPath)
+            _ = Task { @MainActor in
+                print("==> Running OpenVoice conversion on \(inPath)...")
+                do {
+                    try await OpenVoiceBridge.shared.convert(
+                        inputURL: URL(fileURLWithPath: inPath),
+                        outputURL: URL(fileURLWithPath: outPath),
+                        referenceURL: refURL
+                    )
+                    print("==> OpenVoice conversion complete: \(outPath)")
+                    exit(0)
+                } catch {
+                    print("❌ OpenVoice conversion error: \(error)")
+                    exit(1)
+                }
+            }
+        }
+
         if CommandLine.arguments.contains("--trace-pipeline") {
             _ = Task { @MainActor in
                 let rvc = RVCInference()
