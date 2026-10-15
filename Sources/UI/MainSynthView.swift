@@ -36,7 +36,7 @@ public struct MainSynthView: View {
         .onChange(of: viewState.isExpandedToStudio) { _, expanded in
             DispatchQueue.main.async {
                 guard let window = NSApplication.shared.windows.first(where: { $0.isVisible }) ?? NSApplication.shared.keyWindow else { return }
-                let targetSize = expanded ? CGSize(width: 960, height: 720) : CGSize(width: 540, height: 370)
+                let targetSize = expanded ? CGSize(width: 960, height: 720) : CGSize(width: 560, height: 400)
                 var frame = window.frame
                 let deltaY = frame.height - targetSize.height
                 frame.size = targetSize

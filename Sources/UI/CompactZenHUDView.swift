@@ -5,7 +5,7 @@ import SwiftUI
 /// Features dual-mode support:
 ///   1. Sensory Soother (Affect De-escalator & Master Calm knob with embedded 3D Neural Net)
 ///   2. Neural Voice (Apple Silicon MLX & OpenVoice with real-time timbre knob & voice presets)
-/// and a 1-click toggle to expand into the full Studio View (Concept 1).
+/// Complete with interactive audio source/destination menus and neural model selector.
 public struct CompactZenHUDView: View {
     @ObservedObject var audioEngine: AppAudioEngine
     @ObservedObject var rvcController: AudioController
@@ -39,6 +39,38 @@ public struct CompactZenHUDView: View {
                 rvcController.pitchShiftSemitones = Float(semitones)
             }
         )
+    }
+
+    private func selectInputDevice(_ dev: AudioDeviceInfo) {
+        if selectedTab == 0 {
+            audioEngine.setInputDevice(dev)
+            rvcController.setInputDevice(dev, autoStartIfReady: false)
+            if rvcController.isRunning {
+                rvcController.stop()
+            }
+        } else {
+            rvcController.setInputDevice(dev)
+            audioEngine.setInputDevice(dev, autoStartIfReady: false)
+            if audioEngine.isRunning {
+                audioEngine.stop()
+            }
+        }
+    }
+
+    private func selectOutputDevice(_ dev: AudioDeviceInfo) {
+        if selectedTab == 0 {
+            audioEngine.setOutputDevice(dev)
+            rvcController.setOutputDevice(dev, autoStartIfReady: false)
+            if rvcController.isRunning {
+                rvcController.stop()
+            }
+        } else {
+            rvcController.setOutputDevice(dev)
+            audioEngine.setOutputDevice(dev, autoStartIfReady: false)
+            if audioEngine.isRunning {
+                audioEngine.stop()
+            }
+        }
     }
 
     public var body: some View {
@@ -111,32 +143,86 @@ public struct CompactZenHUDView: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 10)
 
-                // Sub-header status strip: Routing & Active Engine State
-                HStack(spacing: 8) {
-                    let inputName = (selectedTab == 0 ? audioEngine.selectedInputDevice?.name : rvcController.selectedInputDevice?.name) ?? "Default Input"
-                    let outputName = (selectedTab == 0 ? audioEngine.selectedOutputDevice?.name : rvcController.selectedOutputDevice?.name) ?? "Default Output"
+                // 2. SUB-HEADER: INTERACTIVE SOURCE & DESTINATION PICKERS + ENGINE STATUS
+                HStack(spacing: 6) {
+                    let currentInput = (selectedTab == 0 ? audioEngine.selectedInputDevice : rvcController.selectedInputDevice)
+                    let currentOutput = (selectedTab == 0 ? audioEngine.selectedOutputDevice : rvcController.selectedOutputDevice)
 
-                    HStack(spacing: 4) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 7.5))
-                            .foregroundColor(SynthTheme.ledCyan)
-                        Text(inputName)
-                            .lineLimit(1)
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 6.5, weight: .bold))
-                            .foregroundColor(SynthTheme.textDim)
-                        Image(systemName: "speaker.wave.2.fill")
-                            .font(.system(size: 7.5))
-                            .foregroundColor(SynthTheme.ledGreen)
-                        Text(outputName)
-                            .lineLimit(1)
+                    // INTERACTIVE AUDIO SOURCE PICKER MENU
+                    Menu {
+                        ForEach(deviceManager.inputDevices) { device in
+                            Button(action: { selectInputDevice(device) }) {
+                                HStack {
+                                    Text(device.name)
+                                    if currentInput?.id == device.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(SynthTheme.ledCyan)
+                            Text(currentInput?.name ?? "Select Input...")
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: 125, alignment: .leading)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 6.5, weight: .bold))
+                                .foregroundColor(SynthTheme.textDim)
+                        }
+                        .font(.system(size: 8, weight: .medium, design: .default))
+                        .foregroundColor(SynthTheme.textBright)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color.black.opacity(0.45))
+                        .cornerRadius(5)
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.08), lineWidth: 0.8))
                     }
-                    .font(.system(size: 7.5, weight: .medium, design: .default))
-                    .foregroundColor(SynthTheme.textDim)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color.black.opacity(0.35))
-                    .cornerRadius(4)
+                    .menuStyle(.borderlessButton)
+                    .help("Select Audio Input Source")
+
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 6.5, weight: .bold))
+                        .foregroundColor(SynthTheme.textDim)
+
+                    // INTERACTIVE AUDIO DESTINATION PICKER MENU
+                    Menu {
+                        ForEach(deviceManager.outputDevices) { device in
+                            Button(action: { selectOutputDevice(device) }) {
+                                HStack {
+                                    Text(device.name)
+                                    if currentOutput?.id == device.id {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.system(size: 7.5))
+                                .foregroundColor(SynthTheme.ledGreen)
+                            Text(currentOutput?.name ?? "Select Output...")
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .frame(maxWidth: 125, alignment: .leading)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 6.5, weight: .bold))
+                                .foregroundColor(SynthTheme.textDim)
+                        }
+                        .font(.system(size: 8, weight: .medium, design: .default))
+                        .foregroundColor(SynthTheme.textBright)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(Color.black.opacity(0.45))
+                        .cornerRadius(5)
+                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.08), lineWidth: 0.8))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .help("Select Audio Destination / Output")
 
                     Spacer()
 
@@ -180,7 +266,7 @@ public struct CompactZenHUDView: View {
 
                 Spacer(minLength: 0)
 
-                // 2. MAIN CENTER HUD
+                // 3. MAIN CENTER HUD
                 if selectedTab == 0 {
                     // TAB 0: SENSORY SOOTHER VIEW
                     sootherHUDView
@@ -191,7 +277,7 @@ public struct CompactZenHUDView: View {
 
                 Spacer(minLength: 0)
 
-                // 3. BOTTOM PRESET & CONTROL BAR
+                // 4. BOTTOM PRESET & CONTROL BAR
                 if selectedTab == 0 {
                     sootherPresetBar
                 } else {
@@ -199,7 +285,7 @@ public struct CompactZenHUDView: View {
                 }
             }
         }
-        .frame(minWidth: 530, idealWidth: 550, maxWidth: 570, minHeight: 360, idealHeight: 380, maxHeight: 400)
+        .frame(minWidth: 540, idealWidth: 560, maxWidth: 580, minHeight: 380, idealHeight: 400, maxHeight: 420)
     }
 
     // MARK: - Sensory Soother Components (Tab 0)
@@ -373,7 +459,7 @@ public struct CompactZenHUDView: View {
             }
             .frame(width: 65)
 
-            // Center Column: 3D Neural Pitch & Timbre Knob
+            // Center Column: 3D Neural Pitch & Timbre Knob + Interactive Character Selector
             VStack(spacing: 4) {
                 MasterCalmHaloKnob(
                     value: pitchProgressBinding,
@@ -382,13 +468,57 @@ public struct CompactZenHUDView: View {
                     title: "PITCH SHIFT",
                     displayValue: String(format: "%+.0f st", rvcController.pitchShiftSemitones),
                     accentColor: SynthTheme.ledPurple,
-                    size: 155
+                    size: 145
                 )
+
+                // INTERACTIVE NEURAL MODEL SELECTOR DROPDOWN
+                Menu {
+                    ForEach(AudioController.availableCharacters) { char in
+                        Button(action: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                rvcController.selectedCharacter = char
+                                rvcController.pitchShiftSemitones = Float(char.defaultPitch)
+                            }
+                        }) {
+                            HStack {
+                                Text(char.name)
+                                if rvcController.selectedCharacter.id == char.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 8))
+                            .foregroundColor(SynthTheme.ledPurple)
+                        Text(rvcController.selectedCharacter.name)
+                            .font(.system(size: 8.5, weight: .bold, design: .default))
+                            .foregroundColor(SynthTheme.textBright)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 165)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 6.5, weight: .bold))
+                            .foregroundColor(SynthTheme.textDim)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3.5)
+                    .background(Color.black.opacity(0.55))
+                    .cornerRadius(5)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5)
+                            .stroke(SynthTheme.ledPurple.opacity(0.5), lineWidth: 0.8)
+                    )
+                }
+                .menuStyle(.borderlessButton)
+                .help("Select Neural Voice Character Model")
 
                 Text(rvcController.isRunning ?
                      (rvcController.isSynthesizingChunk ? "⚡ Synthesizing live audio (\(Int(rvcController.lastInferenceDurationMs))ms)" : "Neural Timbre Ready • \(rvcController.selectedCharacter.name)") :
-                     "Engine Standby • Click START RVC")
-                    .font(.system(size: 8, weight: .medium, design: .default))
+                     "Engine Standby • Click RVC ACTIVE to Start")
+                    .font(.system(size: 7.5, weight: .medium, design: .default))
                     .foregroundColor(rvcController.isRunning ? SynthTheme.ledGreen : SynthTheme.textDim)
                     .lineLimit(1)
             }
@@ -442,19 +572,19 @@ public struct CompactZenHUDView: View {
                 }) {
                     HStack(spacing: 3) {
                         Text(preset.emoji)
-                            .font(.system(size: 8.5))
+                            .font(.system(size: 8))
                         Text(preset.name)
                             .font(.system(size: 8, weight: .semibold, design: .default))
                     }
-                    .foregroundColor(rvcController.pitchShiftSemitones == preset.pitchShift ? Color.black : SynthTheme.textBright)
+                    .foregroundColor(rvcController.selectedCharacter.id == preset.characterId ? Color.black : SynthTheme.textBright)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 4.5)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(rvcController.pitchShiftSemitones == preset.pitchShift ? SynthTheme.ledPurple : Color.black.opacity(0.4))
+                            .fill(rvcController.selectedCharacter.id == preset.characterId ? SynthTheme.ledPurple : Color.black.opacity(0.4))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .stroke(rvcController.pitchShiftSemitones == preset.pitchShift ? SynthTheme.ledPurple : Color.white.opacity(0.08), lineWidth: 0.8)
+                                    .stroke(rvcController.selectedCharacter.id == preset.characterId ? SynthTheme.ledPurple : Color.white.opacity(0.08), lineWidth: 0.8)
                             )
                     )
                 }
@@ -473,7 +603,7 @@ public struct CompactZenHUDView: View {
                     Text(rvcController.testSynthesisStatus ?? "Test Voice")
                         .font(.system(size: 8, weight: .bold, design: .default))
                 }
-                .padding(.horizontal, 7)
+                .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
