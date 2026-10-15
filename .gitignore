@@ -1,0 +1,15 @@
+.DS_Store
+.build/
+*.app/
+*.xcodeproj/
+*.xcworkspace/
+*.mp3
+*.wav
+*.safetensors
+*.index
+*.pth
+*.bin
+*.tar.gz
+*.zip
+.system_generated/
+tmp/
