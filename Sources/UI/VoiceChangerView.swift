@@ -22,7 +22,7 @@ public struct VoiceChangerView: View {
                             .font(.system(size: 14, weight: .bold, design: .default))
                             .foregroundColor(SynthTheme.textBright)
 
-                        Text("APPLE SILICON MLX")
+                        Text("OPENVOICE V2")
                             .font(.system(size: 8, weight: .bold, design: .monospaced))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -37,7 +37,7 @@ public struct VoiceChangerView: View {
                             .foregroundColor(SynthTheme.ledCyan)
                     }
 
-                    Text("On-device HuBERT feature extraction • RMVPE pitch tracking • 48kHz HiFi-GAN")
+                    Text("Neural Tone Color Converter • Real-Time Voice Transformation")
                         .font(.system(size: 9, weight: .medium, design: .default))
                         .foregroundColor(SynthTheme.textDim)
                 }
@@ -62,7 +62,7 @@ public struct VoiceChangerView: View {
                             .frame(width: 7, height: 7)
                             .shadow(color: controller.isRunning ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
 
-                        Text(controller.isRunning ? "STOP RVC" : "START RVC")
+                        Text(controller.isRunning ? "STOP VOICE" : "START VOICE")
                             .font(.system(size: 9.5, weight: .bold, design: .default))
                             .foregroundColor(Color.white)
                     }
@@ -93,7 +93,7 @@ public struct VoiceChangerView: View {
                         .foregroundColor(.red)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("RVC START FAILURE")
+                        Text("VOICE START FAILURE")
                             .font(.system(size: 9.5, weight: .bold, design: .default))
                             .foregroundColor(.white)
                         Text(err)
@@ -221,10 +221,9 @@ public struct VoiceChangerView: View {
                     // Collapsible Weight Files & Component Readiness
                     if isShowingModelDetails {
                         VStack(alignment: .leading, spacing: 4) {
-                            componentStatusRow(name: "Voice Weights", file: controller.selectedCharacter.modelFileName, ready: controller.loadedComponents.synth)
-                            componentStatusRow(name: "HuBERT", file: "hubert_base.safetensors", ready: controller.loadedComponents.hubert)
-                            componentStatusRow(name: "Pitch Tracker", file: "rmvpe.safetensors", ready: controller.loadedComponents.rmvpe)
-                            componentStatusRow(name: "Index", file: controller.selectedCharacter.indexFileName, ready: controller.loadedComponents.index, isOptional: true)
+                            componentStatusRow(name: "Voice Profile", file: controller.selectedCharacter.speakerEmbeddingFileName, ready: controller.loadedComponents.synth)
+                            componentStatusRow(name: "Tone Checkpoint", file: "checkpoint.pth", ready: controller.loadedComponents.hubert)
+                            componentStatusRow(name: "Converter Config", file: "config.json", ready: controller.loadedComponents.rmvpe)
 
                             HStack {
                                 Spacer()
@@ -317,24 +316,27 @@ public struct VoiceChangerView: View {
                         .accentColor(SynthTheme.ledCyan)
                     }
 
-                    // Index Rate Slider
+                    // Tone Color Strength (Tau) Slider
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            Text("Retrieval Match (Index)")
+                            Text("Tone Color Strength (Tau)")
                                 .font(.system(size: 8.5, weight: .semibold, design: .default))
                                 .foregroundColor(SynthTheme.textDim)
                             Spacer()
-                            Text(String(format: "%.2f", controller.indexRate))
+                            Text(String(format: "%.2f", controller.toneColorTau))
                                 .font(.system(size: 9.5, weight: .bold, design: .rounded))
                                 .foregroundColor(SynthTheme.ledAmber)
                         }
 
                         Slider(
                             value: Binding(
-                                get: { controller.indexRate },
-                                set: { controller.indexRate = round($0 * 20.0) / 20.0 }
+                                get: { controller.toneColorTau },
+                                set: {
+                                    controller.toneColorTau = round($0 * 20.0) / 20.0
+                                    controller.indexRate = controller.toneColorTau
+                                }
                             ),
-                            in: 0.0...1.0
+                            in: 0.05...1.0
                         )
                         .accentColor(SynthTheme.ledAmber)
                     }
@@ -414,7 +416,7 @@ public struct VoiceChangerView: View {
                     HStack(spacing: 14) {
                         LevelBar(title: "MIC", level: controller.inputLevel, color: SynthTheme.ledCyan)
                         LevelBar(
-                            title: "RVC",
+                            title: "VOICE",
                             level: controller.outputLevel,
                             color: controller.isNeuralModelLoaded ? SynthTheme.ledGreen : Color.red.opacity(0.3),
                             subtitle: !controller.isNeuralModelLoaded ? "MUTED" : (!controller.isVoiceActive ? "GATE" : nil)
@@ -487,7 +489,7 @@ public struct VoiceChangerView: View {
                         .frame(width: 8, height: 8)
                         .shadow(color: SynthTheme.ledGreen.opacity(0.8), radius: 4)
 
-                    Text("Neural Engine Ready")
+                    Text("OpenVoice Engine Ready")
                         .font(.system(size: 10, weight: .bold, design: .default))
                         .foregroundColor(SynthTheme.textBright)
 
@@ -499,7 +501,7 @@ public struct VoiceChangerView: View {
                         .background(SynthTheme.ledCyan.opacity(0.12))
                         .cornerRadius(3)
 
-                    Text("MLX METAL")
+                    Text("V2 TONE COLOR")
                         .font(.system(size: 8, weight: .bold, design: .monospaced))
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1.5)
@@ -641,7 +643,7 @@ public struct VoiceChangerView: View {
         case .loading(let charName):
             HStack(spacing: 10) {
                 ProgressView().scaleEffect(0.7).frame(width: 16, height: 16)
-                Text("Initializing Metal tensors for \(charName)...")
+                Text("Loading OpenVoice V2 for \(charName)...")
                     .font(.system(size: 9.5, weight: .medium, design: .default))
                     .foregroundColor(SynthTheme.ledAmber)
                 Spacer()

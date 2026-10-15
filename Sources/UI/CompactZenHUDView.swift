@@ -2,24 +2,43 @@ import SwiftUI
 
 /// Compact Zen HUD View (Concept 4)
 /// A minimalist, distraction-free floating desktop companion for nervoussystemprotect.
-/// Features the embedded 3D Neural Net Master Calm Knob, real-time stress vs. soothed metering,
-/// quick soothing presets, and a 1-click toggle to expand into the full Studio View (Concept 1).
+/// Features dual-mode support:
+///   1. Sensory Soother (Affect De-escalator & Master Calm knob with embedded 3D Neural Net)
+///   2. Neural Voice (Apple Silicon MLX & OpenVoice with real-time timbre knob & voice presets)
+/// and a 1-click toggle to expand into the full Studio View (Concept 1).
 public struct CompactZenHUDView: View {
     @ObservedObject var audioEngine: AppAudioEngine
     @ObservedObject var rvcController: AudioController
     @ObservedObject var deviceManager: AudioDeviceManager
+    @Binding var selectedTab: Int
     @Binding var isExpandedToStudio: Bool
 
     public init(
         audioEngine: AppAudioEngine,
         rvcController: AudioController,
         deviceManager: AudioDeviceManager,
+        selectedTab: Binding<Int>,
         isExpandedToStudio: Binding<Bool>
     ) {
         self.audioEngine = audioEngine
         self.rvcController = rvcController
         self.deviceManager = deviceManager
+        self._selectedTab = selectedTab
         self._isExpandedToStudio = isExpandedToStudio
+    }
+
+    // Binding for neural pitch normalized to 0.0 ... 1.0 (mapping -12 st ... +12 st)
+    private var pitchProgressBinding: Binding<Float> {
+        Binding(
+            get: {
+                let clamped = max(-12.0, min(12.0, Double(rvcController.pitchShiftSemitones)))
+                return Float((clamped + 12.0) / 24.0)
+            },
+            set: { progress in
+                let semitones = round((Double(progress) * 24.0) - 12.0)
+                rvcController.pitchShiftSemitones = Float(semitones)
+            }
+        )
     }
 
     public var body: some View {
@@ -35,78 +54,32 @@ public struct CompactZenHUDView: View {
             )
             .ignoresSafeArea()
 
-            VStack(spacing: 12) {
-                // 1. TOP HEADER & EXPAND CONTROLS
+            VStack(spacing: 8) {
+                // 1. TOP HEADER & STUDIO EXPAND
                 HStack(alignment: .center, spacing: 10) {
-                    AppLogoView(size: 26)
+                    AppLogoView(size: 24)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text("nervoussystemprotect")
-                            .font(.system(size: 13, weight: .bold, design: .default))
+                            .font(.system(size: 12.5, weight: .bold, design: .default))
                             .foregroundColor(SynthTheme.textBright)
 
                         Text("MODEL NSP-1 • ZEN COMPANION")
-                            .font(.system(size: 7.5, weight: .bold, design: .monospaced))
+                            .font(.system(size: 7, weight: .bold, design: .monospaced))
                             .foregroundColor(SynthTheme.ledCyan)
                     }
 
                     Spacer()
 
-                    // Quick Device Routing Pill
-                    let inputName = audioEngine.selectedInputDevice?.name ?? "Mic"
-                    let outputName = audioEngine.selectedOutputDevice?.name ?? "Speakers"
-                    HStack(spacing: 4) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 8))
-                            .foregroundColor(SynthTheme.ledCyan)
-                        Text(inputName)
-                            .lineLimit(1)
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 7, weight: .bold))
-                            .foregroundColor(SynthTheme.textDim)
-                        Image(systemName: "speaker.wave.2.fill")
-                            .font(.system(size: 8))
-                            .foregroundColor(SynthTheme.ledGreen)
-                        Text(outputName)
-                            .lineLimit(1)
+                    // Compact Segmented Mode Selector [ Soother | Neural Voice ]
+                    HStack(spacing: 2) {
+                        modeTabButton(title: "Soother", icon: "waveform.path.badge.minus", tabIndex: 0)
+                        modeTabButton(title: "Neural Voice", icon: "brain.head.profile", tabIndex: 1)
                     }
-                    .font(.system(size: 8, weight: .medium, design: .default))
-                    .foregroundColor(SynthTheme.textDim)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.4))
-                    .cornerRadius(5)
-
-                    // Power Pill
-                    Button(action: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                            if audioEngine.isRunning {
-                                audioEngine.userStopped = true
-                                audioEngine.stop()
-                            } else {
-                                audioEngine.userStopped = false
-                                audioEngine.start()
-                            }
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(audioEngine.isRunning ? SynthTheme.ledGreen : Color.red.opacity(0.8))
-                                .frame(width: 6, height: 6)
-                                .shadow(color: audioEngine.isRunning ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
-
-                            Text(audioEngine.isRunning ? "ACTIVE" : "STANDBY")
-                                .font(.system(size: 8.5, weight: .bold, design: .default))
-                                .foregroundColor(audioEngine.isRunning ? Color.white : SynthTheme.textDim)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(audioEngine.isRunning ? Color(red: 0.08, green: 0.32, blue: 0.15) : Color(white: 0.15))
-                        )
-                    }
-                    .buttonStyle(.plain)
+                    .padding(2)
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(6)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.08), lineWidth: 0.8))
 
                     // Expand to Full Studio Button
                     Button(action: {
@@ -116,13 +89,13 @@ public struct CompactZenHUDView: View {
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                .font(.system(size: 8.5, weight: .bold))
+                                .font(.system(size: 8, weight: .bold))
                             Text("Studio View")
-                                .font(.system(size: 9, weight: .bold, design: .default))
+                                .font(.system(size: 8.5, weight: .bold, design: .default))
                         }
                         .foregroundColor(SynthTheme.ledCyan)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 4.5)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
                         .background(
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
                                 .fill(SynthTheme.ledCyan.opacity(0.15))
@@ -135,157 +108,444 @@ public struct CompactZenHUDView: View {
                     .buttonStyle(.plain)
                     .help("Expand to the comprehensive Studio Mode (Concept 1)")
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
 
-                Spacer(minLength: 2)
-
-                // 2. MAIN CENTER HUD: INPUT STRESS METER | 3D NEURAL MASTER CALM KNOB | SOOTHED OUTPUT METER
-                HStack(alignment: .center, spacing: 20) {
-                    // LEFT COLUMN: VOICE STRESS (INPUT) METER
-                    VStack(spacing: 4) {
-                        Text("VOICE STRESS")
-                            .font(.system(size: 7.5, weight: .bold, design: .default))
-                            .foregroundColor(SynthTheme.textDim)
-
-                        Text("INPUT")
-                            .font(.system(size: 7, weight: .medium, design: .default))
-                            .foregroundColor(SynthTheme.textMuted)
-
-                        VerticalCompactMeter(
-                            level: audioEngine.leftLevel,
-                            color: SynthTheme.ledAmber
-                        )
-                        .frame(height: 110)
-
-                        // Latency Badge
-                        HStack(spacing: 3) {
-                            Circle().fill(SynthTheme.ledGreen).frame(width: 3.5, height: 3.5)
-                            Text("0.8 ms")
-                                .font(.system(size: 7.5, weight: .bold, design: .monospaced))
-                                .foregroundColor(SynthTheme.ledGreen)
-                        }
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(SynthTheme.ledGreen.opacity(0.12))
-                        .cornerRadius(3)
-                    }
-                    .frame(width: 65)
-
-                    // CENTER HERO: MASTER CALM HALO KNOB WITH 3D NEURAL MESH
-                    VStack(spacing: 6) {
-                        MasterCalmHaloKnob(
-                            value: $audioEngine.masterDamping,
-                            isVoiceActive: audioEngine.leftLevel > 0.05,
-                            activityRMS: audioEngine.leftLevel,
-                            size: 165
-                        )
-
-                        Text(audioEngine.isBypassed ? "DSP BYPASSED" : (audioEngine.masterDamping > 0.05 ? "Acoustic De-escalation Active" : "Natural Transparent Audio"))
-                            .font(.system(size: 8.5, weight: .medium, design: .default))
-                            .foregroundColor(audioEngine.isBypassed ? SynthTheme.ledAmber : (audioEngine.masterDamping > 0.05 ? SynthTheme.ledCyan : SynthTheme.textDim))
-                    }
-
-                    // RIGHT COLUMN: SOOTHED (OUTPUT) METER
-                    VStack(spacing: 4) {
-                        Text("SOOTHED")
-                            .font(.system(size: 7.5, weight: .bold, design: .default))
-                            .foregroundColor(SynthTheme.textDim)
-
-                        Text("OUTPUT")
-                            .font(.system(size: 7, weight: .medium, design: .default))
-                            .foregroundColor(SynthTheme.textMuted)
-
-                        VerticalCompactMeter(
-                            level: audioEngine.rightLevel,
-                            color: SynthTheme.ledCyan
-                        )
-                        .frame(height: 110)
-
-                        // MLX Core Badge
-                        HStack(spacing: 3) {
-                            Circle().fill(SynthTheme.ledCyan).frame(width: 3.5, height: 3.5)
-                            Text("MLX Core")
-                                .font(.system(size: 7.5, weight: .bold, design: .default))
-                                .foregroundColor(SynthTheme.ledCyan)
-                        }
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(SynthTheme.ledCyan.opacity(0.12))
-                        .cornerRadius(3)
-                    }
-                    .frame(width: 65)
-                }
-                .padding(.horizontal, 10)
-
-                Spacer(minLength: 2)
-
-                // 3. BOTTOM QUICK SOOTHING PRESETS BAR
+                // Sub-header status strip: Routing & Active Engine State
                 HStack(spacing: 8) {
-                    ForEach(AffectPreset.allCases) { preset in
-                        Button(action: {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                audioEngine.applyAffectPreset(preset)
-                            }
-                        }) {
-                            Text(presetCompactLabel(preset))
-                                .font(.system(size: 8.5, weight: audioEngine.selectedAffectPreset == preset ? .bold : .medium, design: .default))
-                                .foregroundColor(audioEngine.selectedAffectPreset == preset ? Color.black : SynthTheme.textBright)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                        .fill(audioEngine.selectedAffectPreset == preset ? SynthTheme.ledCyan : Color.black.opacity(0.4))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                                .stroke(audioEngine.selectedAffectPreset == preset ? SynthTheme.ledCyan : Color.white.opacity(0.08), lineWidth: 1)
-                                        )
-                                )
-                        }
-                        .buttonStyle(.plain)
+                    let inputName = (selectedTab == 0 ? audioEngine.selectedInputDevice?.name : rvcController.selectedInputDevice?.name) ?? "Default Input"
+                    let outputName = (selectedTab == 0 ? audioEngine.selectedOutputDevice?.name : rvcController.selectedOutputDevice?.name) ?? "Default Output"
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 7.5))
+                            .foregroundColor(SynthTheme.ledCyan)
+                        Text(inputName)
+                            .lineLimit(1)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 6.5, weight: .bold))
+                            .foregroundColor(SynthTheme.textDim)
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 7.5))
+                            .foregroundColor(SynthTheme.ledGreen)
+                        Text(outputName)
+                            .lineLimit(1)
                     }
+                    .font(.system(size: 7.5, weight: .medium, design: .default))
+                    .foregroundColor(SynthTheme.textDim)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Color.black.opacity(0.35))
+                    .cornerRadius(4)
 
                     Spacer()
 
-                    // Quick Bypass Toggle
-                    Button(action: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            audioEngine.isBypassed.toggle()
+                    if selectedTab == 0 {
+                        // Soother Active State Toggle
+                        statusButton(
+                            isActive: audioEngine.isRunning,
+                            activeLabel: "SOOTHER ACTIVE",
+                            inactiveLabel: "STANDBY"
+                        ) {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                if audioEngine.isRunning {
+                                    audioEngine.userStopped = true
+                                    audioEngine.stop()
+                                } else {
+                                    audioEngine.userStopped = false
+                                    audioEngine.start()
+                                }
+                            }
                         }
-                    }) {
-                        HStack(spacing: 3.5) {
-                            Circle()
-                                .fill(audioEngine.isBypassed ? SynthTheme.ledAmber : Color.white.opacity(0.25))
-                                .frame(width: 5, height: 5)
-                            Text(audioEngine.isBypassed ? "BYPASS ON" : "Bypass")
-                                .font(.system(size: 8.5, weight: .semibold, design: .default))
-                                .foregroundColor(audioEngine.isBypassed ? SynthTheme.ledAmber : SynthTheme.textDim)
+                    } else {
+                        // Neural Voice Active State Toggle
+                        statusButton(
+                            isActive: rvcController.isRunning,
+                            activeLabel: "RVC ACTIVE",
+                            inactiveLabel: "RVC STANDBY"
+                        ) {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                                if rvcController.isRunning {
+                                    rvcController.userStopped = true
+                                    rvcController.stop()
+                                } else {
+                                    rvcController.userStopped = false
+                                    rvcController.start()
+                                }
+                            }
                         }
-                        .padding(.horizontal, 8)
+                    }
+                }
+                .padding(.horizontal, 14)
+
+                Spacer(minLength: 0)
+
+                // 2. MAIN CENTER HUD
+                if selectedTab == 0 {
+                    // TAB 0: SENSORY SOOTHER VIEW
+                    sootherHUDView
+                } else {
+                    // TAB 1: NEURAL VOICE TRANSFORMER VIEW
+                    neuralHUDView
+                }
+
+                Spacer(minLength: 0)
+
+                // 3. BOTTOM PRESET & CONTROL BAR
+                if selectedTab == 0 {
+                    sootherPresetBar
+                } else {
+                    neuralPresetBar
+                }
+            }
+        }
+        .frame(minWidth: 530, idealWidth: 550, maxWidth: 570, minHeight: 360, idealHeight: 380, maxHeight: 400)
+    }
+
+    // MARK: - Sensory Soother Components (Tab 0)
+
+    private var sootherHUDView: some View {
+        HStack(alignment: .center, spacing: 18) {
+            // Voice Stress Input Meter
+            VStack(spacing: 3) {
+                Text("VOICE STRESS")
+                    .font(.system(size: 7.5, weight: .bold, design: .default))
+                    .foregroundColor(SynthTheme.textDim)
+
+                Text("INPUT")
+                    .font(.system(size: 7, weight: .medium, design: .default))
+                    .foregroundColor(SynthTheme.textMuted)
+
+                VerticalCompactMeter(
+                    level: audioEngine.leftLevel,
+                    color: SynthTheme.ledAmber
+                )
+                .frame(height: 105)
+
+                HStack(spacing: 3) {
+                    Circle().fill(SynthTheme.ledGreen).frame(width: 3.5, height: 3.5)
+                    Text("0.8 ms")
+                        .font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundColor(SynthTheme.ledGreen)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(SynthTheme.ledGreen.opacity(0.12))
+                .cornerRadius(3)
+            }
+            .frame(width: 65)
+
+            // Master Calm Halo Knob
+            VStack(spacing: 4) {
+                MasterCalmHaloKnob(
+                    value: $audioEngine.masterDamping,
+                    isVoiceActive: audioEngine.leftLevel > 0.05,
+                    activityRMS: audioEngine.leftLevel,
+                    title: "MASTER CALM",
+                    accentColor: SynthTheme.ledCyan,
+                    size: 155
+                )
+
+                Text(audioEngine.isBypassed ? "DSP BYPASSED" : (audioEngine.masterDamping > 0.05 ? "Acoustic De-escalation Active" : "Natural Transparent Audio"))
+                    .font(.system(size: 8, weight: .medium, design: .default))
+                    .foregroundColor(audioEngine.isBypassed ? SynthTheme.ledAmber : (audioEngine.masterDamping > 0.05 ? SynthTheme.ledCyan : SynthTheme.textDim))
+            }
+
+            // Soothed Output Meter
+            VStack(spacing: 3) {
+                Text("SOOTHED")
+                    .font(.system(size: 7.5, weight: .bold, design: .default))
+                    .foregroundColor(SynthTheme.textDim)
+
+                Text("OUTPUT")
+                    .font(.system(size: 7, weight: .medium, design: .default))
+                    .foregroundColor(SynthTheme.textMuted)
+
+                VerticalCompactMeter(
+                    level: audioEngine.rightLevel,
+                    color: SynthTheme.ledCyan
+                )
+                .frame(height: 105)
+
+                HStack(spacing: 3) {
+                    Circle().fill(SynthTheme.ledCyan).frame(width: 3.5, height: 3.5)
+                    Text("MLX Core")
+                        .font(.system(size: 7, weight: .bold, design: .default))
+                        .foregroundColor(SynthTheme.ledCyan)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(SynthTheme.ledCyan.opacity(0.12))
+                .cornerRadius(3)
+            }
+            .frame(width: 65)
+        }
+        .padding(.horizontal, 10)
+    }
+
+    private var sootherPresetBar: some View {
+        HStack(spacing: 7) {
+            ForEach(AffectPreset.allCases) { preset in
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        audioEngine.applyAffectPreset(preset)
+                    }
+                }) {
+                    Text(presetCompactLabel(preset))
+                        .font(.system(size: 8.5, weight: audioEngine.selectedAffectPreset == preset ? .bold : .medium, design: .default))
+                        .foregroundColor(audioEngine.selectedAffectPreset == preset ? Color.black : SynthTheme.textBright)
+                        .padding(.horizontal, 9)
                         .padding(.vertical, 4.5)
                         .background(
                             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .fill(audioEngine.isBypassed ? SynthTheme.ledAmber.opacity(0.18) : Color.black.opacity(0.35))
+                                .fill(audioEngine.selectedAffectPreset == preset ? SynthTheme.ledCyan : Color.black.opacity(0.4))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                        .stroke(audioEngine.isBypassed ? SynthTheme.ledAmber.opacity(0.6) : Color.white.opacity(0.06), lineWidth: 0.8)
+                                        .stroke(audioEngine.selectedAffectPreset == preset ? SynthTheme.ledCyan : Color.white.opacity(0.08), lineWidth: 0.8)
                                 )
                         )
-                    }
-                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 14)
+                .buttonStyle(.plain)
             }
+
+            Spacer()
+
+            Button(action: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    audioEngine.isBypassed.toggle()
+                }
+            }) {
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(audioEngine.isBypassed ? SynthTheme.ledAmber : Color.white.opacity(0.25))
+                        .frame(width: 4.5, height: 4.5)
+                    Text(audioEngine.isBypassed ? "BYPASS ON" : "Bypass")
+                        .font(.system(size: 8, weight: .semibold, design: .default))
+                        .foregroundColor(audioEngine.isBypassed ? SynthTheme.ledAmber : SynthTheme.textDim)
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(audioEngine.isBypassed ? SynthTheme.ledAmber.opacity(0.18) : Color.black.opacity(0.35))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(audioEngine.isBypassed ? SynthTheme.ledAmber.opacity(0.6) : Color.white.opacity(0.06), lineWidth: 0.8)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .frame(minWidth: 520, idealWidth: 540, maxWidth: 560, minHeight: 350, idealHeight: 370, maxHeight: 390)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+    }
+
+    // MARK: - Neural Voice Components (Tab 1)
+
+    private var neuralHUDView: some View {
+        HStack(alignment: .center, spacing: 18) {
+            // Left Column: Mic Input Meter
+            VStack(spacing: 3) {
+                Text("MIC INPUT")
+                    .font(.system(size: 7.5, weight: .bold, design: .default))
+                    .foregroundColor(SynthTheme.textDim)
+
+                Text(rvcController.isVoiceActive ? "ACTIVE" : "GATED")
+                    .font(.system(size: 7, weight: .semibold, design: .default))
+                    .foregroundColor(rvcController.isVoiceActive ? SynthTheme.ledGreen : SynthTheme.textMuted)
+
+                VerticalCompactMeter(
+                    level: rvcController.rawInputRMS * 8.0,
+                    color: SynthTheme.ledGreen
+                )
+                .frame(height: 105)
+
+                HStack(spacing: 3) {
+                    Circle().fill(rvcController.isVoiceActive ? SynthTheme.ledGreen : Color.white.opacity(0.3)).frame(width: 3.5, height: 3.5)
+                    Text("GATE")
+                        .font(.system(size: 7, weight: .bold, design: .default))
+                        .foregroundColor(rvcController.isVoiceActive ? SynthTheme.ledGreen : SynthTheme.textDim)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(Color.white.opacity(0.05))
+                .cornerRadius(3)
+            }
+            .frame(width: 65)
+
+            // Center Column: 3D Neural Pitch & Timbre Knob
+            VStack(spacing: 4) {
+                MasterCalmHaloKnob(
+                    value: pitchProgressBinding,
+                    isVoiceActive: rvcController.isVoiceActive,
+                    activityRMS: rvcController.rawInputRMS * 4.0,
+                    title: "PITCH SHIFT",
+                    displayValue: String(format: "%+.0f st", rvcController.pitchShiftSemitones),
+                    accentColor: SynthTheme.ledPurple,
+                    size: 155
+                )
+
+                Text(rvcController.isRunning ?
+                     (rvcController.isSynthesizingChunk ? "⚡ Synthesizing live audio (\(Int(rvcController.lastInferenceDurationMs))ms)" : "Neural Timbre Ready • \(rvcController.selectedCharacter.name)") :
+                     "Engine Standby • Click START RVC")
+                    .font(.system(size: 8, weight: .medium, design: .default))
+                    .foregroundColor(rvcController.isRunning ? SynthTheme.ledGreen : SynthTheme.textDim)
+                    .lineLimit(1)
+            }
+
+            // Right Column: Neural Synthesized Output Meter
+            VStack(spacing: 3) {
+                Text("NEURAL OUT")
+                    .font(.system(size: 7.5, weight: .bold, design: .default))
+                    .foregroundColor(SynthTheme.textDim)
+
+                Text(rvcController.selectedCharacter.id.prefix(8).uppercased())
+                    .font(.system(size: 7, weight: .semibold, design: .monospaced))
+                    .foregroundColor(SynthTheme.ledPurple)
+                    .lineLimit(1)
+
+                VerticalCompactMeter(
+                    level: rvcController.outputLevel,
+                    color: SynthTheme.ledPurple
+                )
+                .frame(height: 105)
+
+                HStack(spacing: 3) {
+                    Circle().fill(SynthTheme.ledPurple).frame(width: 3.5, height: 3.5)
+                    Text("< 15 ms")
+                        .font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundColor(SynthTheme.ledPurple)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1.5)
+                .background(SynthTheme.ledPurple.opacity(0.12))
+                .cornerRadius(3)
+            }
+            .frame(width: 65)
+        }
+        .padding(.horizontal, 10)
+    }
+
+    private var neuralPresetBar: some View {
+        HStack(spacing: 6) {
+            // Quick Built-in Character / Preset Pills
+            let presets = Array(AudioController.builtinPresets.prefix(4))
+            ForEach(presets) { preset in
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                        rvcController.pitchShiftSemitones = preset.pitchShift
+                        rvcController.indexRate = preset.indexRate
+                        if let char = AudioController.availableCharacters.first(where: { $0.id == preset.characterId }) {
+                            rvcController.selectedCharacter = char
+                        }
+                    }
+                }) {
+                    HStack(spacing: 3) {
+                        Text(preset.emoji)
+                            .font(.system(size: 8.5))
+                        Text(preset.name)
+                            .font(.system(size: 8, weight: .semibold, design: .default))
+                    }
+                    .foregroundColor(rvcController.pitchShiftSemitones == preset.pitchShift ? Color.black : SynthTheme.textBright)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(rvcController.pitchShiftSemitones == preset.pitchShift ? SynthTheme.ledPurple : Color.black.opacity(0.4))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .stroke(rvcController.pitchShiftSemitones == preset.pitchShift ? SynthTheme.ledPurple : Color.white.opacity(0.08), lineWidth: 0.8)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+
+            // Test Voice Button
+            Button(action: {
+                rvcController.testNeuralSynthesis()
+            }) {
+                HStack(spacing: 3) {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.system(size: 7.5))
+                    Text(rvcController.testSynthesisStatus ?? "Test Voice")
+                        .font(.system(size: 8, weight: .bold, design: .default))
+                }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(SynthTheme.ledGreen.opacity(0.18))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(SynthTheme.ledGreen.opacity(0.6), lineWidth: 0.8)
+                        )
+                )
+                .foregroundColor(SynthTheme.ledGreen)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+    }
+
+    // MARK: - Helpers
+
+    private func modeTabButton(title: String, icon: String, tabIndex: Int) -> some View {
+        Button(action: {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                selectedTab = tabIndex
+            }
+        }) {
+            HStack(spacing: 3.5) {
+                Image(systemName: icon)
+                    .font(.system(size: 8, weight: .bold))
+                Text(title)
+                    .font(.system(size: 8.5, weight: selectedTab == tabIndex ? .bold : .medium, design: .default))
+            }
+            .foregroundColor(selectedTab == tabIndex ? Color.white : SynthTheme.textDim)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3.5)
+            .background(
+                selectedTab == tabIndex ?
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.white.opacity(0.15))
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(SynthTheme.ledCyan.opacity(0.5), lineWidth: 0.6)) :
+                nil
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func statusButton(isActive: Bool, activeLabel: String, inactiveLabel: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3.5) {
+                Circle()
+                    .fill(isActive ? SynthTheme.ledGreen : Color.red.opacity(0.8))
+                    .frame(width: 5, height: 5)
+                    .shadow(color: isActive ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 2)
+
+                Text(isActive ? activeLabel : inactiveLabel)
+                    .font(.system(size: 7.5, weight: .bold, design: .default))
+                    .foregroundColor(isActive ? Color.white : SynthTheme.textDim)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isActive ? Color(red: 0.08, green: 0.32, blue: 0.15) : Color(white: 0.15))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private func presetCompactLabel(_ preset: AffectPreset) -> String {
         switch preset {
         case .natural: return "Natural"
         case .calmSoothe: return "Calm Soothe"
-        case .deadpan: return "Deadpan Whisper"
+        case .deadpan: return "Deadpan"
         case .robotDrone: return "Zen Drone"
         }
     }
@@ -310,7 +570,7 @@ private struct VerticalCompactMeter: View {
                     .shadow(color: isLit ? segColor.opacity(0.7) : Color.clear, radius: 2)
             }
         }
-        .padding(4)
+        .padding(3.5)
         .background(Color.black.opacity(0.45))
         .cornerRadius(5)
         .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.white.opacity(0.06), lineWidth: 0.8))

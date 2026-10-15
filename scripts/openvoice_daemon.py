@@ -167,8 +167,11 @@ def main():
                         file_obj.flush()
 
                 elif cmd == "QUIT":
-                    file_obj.write(b"BYE\n")
-                    file_obj.flush()
+                    try:
+                        file_obj.write(b"BYE\n")
+                        file_obj.flush()
+                    except Exception:
+                        pass
                     server.close()
                     if os.path.exists(SOCKET_PATH):
                         os.unlink(SOCKET_PATH)

@@ -1,8 +1,8 @@
 import SwiftUI
 
 final class SynthViewState: ObservableObject {
-    @Published var selectedTab: Int = CommandLine.arguments.contains("--tab-rvc") ? 1 : 0
-    @Published var isExpandedToStudio: Bool = CommandLine.arguments.contains("--studio") || CommandLine.arguments.contains("--tab-rvc")
+    @Published var selectedTab: Int = (CommandLine.arguments.contains("--tab-rvc") || CommandLine.arguments.contains("--compact-neural")) ? 1 : 0
+    @Published var isExpandedToStudio: Bool = CommandLine.arguments.contains("--studio")
 }
 
 public struct MainSynthView: View {
@@ -19,17 +19,29 @@ public struct MainSynthView: View {
 
     public var body: some View {
         Group {
-            if !viewState.isExpandedToStudio && !CommandLine.arguments.contains("--studio") && !CommandLine.arguments.contains("--tab-rvc") {
+            if !viewState.isExpandedToStudio && !CommandLine.arguments.contains("--studio") {
                 // CONCEPT 4: COMPACT ZEN HUD (Default Companion View)
                 CompactZenHUDView(
                     audioEngine: audioEngine,
                     rvcController: rvcController,
                     deviceManager: deviceManager,
+                    selectedTab: $viewState.selectedTab,
                     isExpandedToStudio: $viewState.isExpandedToStudio
                 )
             } else {
                 // CONCEPT 1: EXPANDED SLEEK ZEN STUDIO VIEW
                 studioView
+            }
+        }
+        .onChange(of: viewState.isExpandedToStudio) { _, expanded in
+            DispatchQueue.main.async {
+                guard let window = NSApplication.shared.windows.first(where: { $0.isVisible }) ?? NSApplication.shared.keyWindow else { return }
+                let targetSize = expanded ? CGSize(width: 960, height: 720) : CGSize(width: 540, height: 370)
+                var frame = window.frame
+                let deltaY = frame.height - targetSize.height
+                frame.size = targetSize
+                frame.origin.y += deltaY
+                window.setFrame(frame, display: true, animate: true)
             }
         }
         .onAppear {

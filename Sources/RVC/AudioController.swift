@@ -8,16 +8,20 @@ import MLXNN
 public struct VoiceCharacter: Identifiable, Hashable {
     public let id: String
     public let name: String
-    public let modelFileName: String
-    public let indexFileName: String
+    public let speakerEmbeddingFileName: String
+    public let defaultTau: Float
     public let defaultPitch: Int
     public let description: String
 
-    public init(id: String, name: String, modelFileName: String, indexFileName: String, defaultPitch: Int = 0, description: String = "") {
+    // Backwards compatibility accessors
+    public var modelFileName: String { speakerEmbeddingFileName }
+    public var indexFileName: String { speakerEmbeddingFileName }
+
+    public init(id: String, name: String, speakerEmbeddingFileName: String, defaultTau: Float = 0.3, defaultPitch: Int = 0, description: String = "") {
         self.id = id
         self.name = name
-        self.modelFileName = modelFileName
-        self.indexFileName = indexFileName
+        self.speakerEmbeddingFileName = speakerEmbeddingFileName
+        self.defaultTau = defaultTau
         self.defaultPitch = defaultPitch
         self.description = description
     }
@@ -49,7 +53,7 @@ public struct VoicePreset: Identifiable, Codable, Equatable, Hashable {
         description: String,
         characterId: String,
         pitchShift: Float,
-        indexRate: Float = 0.75,
+        indexRate: Float = 0.3,
         silenceThreshold: Float = 0.008,
         isBuiltin: Bool = false
     ) {
@@ -69,120 +73,88 @@ public struct VoicePreset: Identifiable, Codable, Equatable, Hashable {
 public final class AudioController: ObservableObject {
     public static let availableCharacters: [VoiceCharacter] = [
         VoiceCharacter(
-            id: "drake",
-            name: "Drake (Warm Baritone)",
-            modelFileName: "drake.safetensors",
-            indexFileName: "drake.index",
+            id: "american_executive",
+            name: "American Executive (Warm Baritone)",
+            speakerEmbeddingFileName: "ses/en-us.pth",
+            defaultTau: 0.3,
             defaultPitch: -2,
-            description: "Deep, melodic vocal timbre with resonant lows"
+            description: "Deep, articulate US executive presence with confident resonant lows"
         ),
         VoiceCharacter(
-            id: "eminem",
-            name: "Eminem (High Energy Rap)",
-            modelFileName: "eminem.safetensors",
-            indexFileName: "eminem.index",
+            id: "british_authority",
+            name: "British Authority (Calm Deep)",
+            speakerEmbeddingFileName: "ses/en-default.pth",
+            defaultTau: 0.3,
+            defaultPitch: -4,
+            description: "Calm, composed BBC-style authority to de-escalate tension"
+        ),
+        VoiceCharacter(
+            id: "australian_negotiator",
+            name: "Australian Negotiator (Warm Mid)",
+            speakerEmbeddingFileName: "ses/en-au.pth",
+            defaultTau: 0.35,
             defaultPitch: 0,
-            description: "Sharp, articulated mid-forward vocal contour"
+            description: "Crisp conversational presence with balanced mid-range projection"
         ),
         VoiceCharacter(
-            id: "anime_heroine",
-            name: "Anime Heroine (Bright Soprano)",
-            modelFileName: "anime_heroine.safetensors",
-            indexFileName: "anime_heroine.index",
-            defaultPitch: 12,
-            description: "Airy, high-frequency converted vocal tone"
-        ),
-        VoiceCharacter(
-            id: "f0G48k",
-            name: "RVC Pretrained v2 (Neutral 48k)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
+            id: "expressive_presence",
+            name: "Warm Expressive (Studio Tone)",
+            speakerEmbeddingFileName: "example_reference.mp3",
+            defaultTau: 0.25,
             defaultPitch: 0,
-            description: "Official RVC v2 reference 48kHz neutral neural voice"
+            description: "Natural vibrant timbre cloned directly from studio voice reference"
         ),
         VoiceCharacter(
-            id: "deep_authority",
-            name: "Deep Authority (Calm Baritone)",
-            modelFileName: "drake.safetensors",
-            indexFileName: "drake.index",
-            defaultPitch: -6,
-            description: "Low pitch & dark chest formants to calm meetings and de-escalate tension"
-        ),
-        VoiceCharacter(
-            id: "radio_host",
-            name: "Radio DJ / Executive Host",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: -1,
-            description: "Crisp executive presence with broadcast warmth and refined highs"
-        ),
-        VoiceCharacter(
-            id: "telephone_disguise",
-            name: "Telephone (Narrowband Disguise)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
+            id: "spanish_warmth",
+            name: "Spanish Warmth (Rich Harmonic)",
+            speakerEmbeddingFileName: "ses/es.pth",
+            defaultTau: 0.3,
             defaultPitch: 0,
-            description: "Landline bandwidth restriction (300Hz–3.4kHz) for meeting anonymity"
+            description: "Warm, rich acoustic timbre with natural expressive contour"
         ),
         VoiceCharacter(
-            id: "robot_drone",
-            name: "Robot Drone (Deadpan Neutralizer)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: 0,
-            description: "Flattened robotic pitch and stripped affect for emotional neutralization"
+            id: "french_elegance",
+            name: "French Elegance (Refined Soft)",
+            speakerEmbeddingFileName: "ses/fr.pth",
+            defaultTau: 0.3,
+            defaultPitch: 2,
+            description: "Softened melodic vocal texture with delicate air"
         ),
         VoiceCharacter(
-            id: "whisper_soothe",
-            name: "Whisper (Anti-Anxiety Soothe)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: 0,
+            id: "japanese_calm",
+            name: "Japanese Serene (Clear)",
+            speakerEmbeddingFileName: "ses/jp.pth",
+            defaultTau: 0.3,
+            defaultPitch: 1,
+            description: "Clear, polite, and disciplined vocal delivery"
+        ),
+        VoiceCharacter(
+            id: "soothing_meditation",
+            name: "Whisper / Anti-Anxiety Soothe",
+            speakerEmbeddingFileName: "ses/en-newest.pth",
+            defaultTau: 0.2,
+            defaultPitch: -2,
             description: "Softened breathy vocal tone for low-stimulation nervous system protection"
-        ),
-        VoiceCharacter(
-            id: "chipmunk",
-            name: "Chipmunk (High Pitch Humor)",
-            modelFileName: "anime_heroine.safetensors",
-            indexFileName: "anime_heroine.index",
-            defaultPitch: 7,
-            description: "High pitch and bright formants for playful lightness"
-        ),
-        VoiceCharacter(
-            id: "stadium",
-            name: "Stadium (Announcement Hall)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: 0,
-            description: "Spacious projection and wide room acoustics"
-        ),
-        VoiceCharacter(
-            id: "ghost",
-            name: "Ghost (Ethereal Veil)",
-            modelFileName: "anime_heroine.safetensors",
-            indexFileName: "anime_heroine.index",
-            defaultPitch: -2,
-            description: "Mystic ambient disguise with diffused high-end sparkle"
         )
     ]
 
     public static let builtinPresets: [VoicePreset] = [
-        VoicePreset(id: "clean", name: "Clean", emoji: "🎙️", description: "Natural neural voice with transparent response", characterId: "f0G48k", pitchShift: 0, indexRate: 0.75, isBuiltin: true),
-        VoicePreset(id: "deep", name: "Deep Voice", emoji: "🎩", description: "Calm grounded baritone with dark formants to de-escalate tension", characterId: "deep_authority", pitchShift: -6, indexRate: 0.85, isBuiltin: true),
-        VoicePreset(id: "radio", name: "Radio DJ", emoji: "📻", description: "Executive broadcast warmth & crisp articulation for meetings", characterId: "radio_host", pitchShift: -1, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "telephone", name: "Telephone", emoji: "📞", description: "Narrowband landline call disguise (300Hz–3.4kHz)", characterId: "telephone_disguise", pitchShift: 0, indexRate: 0.70, isBuiltin: true),
-        VoicePreset(id: "robot", name: "Robot", emoji: "🤖", description: "Deadpan neutralizer with flattened robotic prosody", characterId: "robot_drone", pitchShift: 0, indexRate: 0.50, isBuiltin: true),
-        VoicePreset(id: "whisper", name: "Whisper", emoji: "🤫", description: "Breathy anti-anxiety tone for low-stimulation soothing", characterId: "whisper_soothe", pitchShift: 0, indexRate: 0.60, isBuiltin: true),
-        VoicePreset(id: "chipmunk", name: "Chipmunk", emoji: "🐿️", description: "High pitch & bright articulate formants", characterId: "chipmunk", pitchShift: 7, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "helium", name: "Helium", emoji: "🎈", description: "Airy balloon-gas timbre with elevated pitch", characterId: "anime_heroine", pitchShift: 3, indexRate: 0.70, isBuiltin: true),
-        VoicePreset(id: "ghost", name: "Ghost", emoji: "👻", description: "Ethereal acoustic veil for complete meeting anonymity", characterId: "ghost", pitchShift: -2, indexRate: 0.75, isBuiltin: true),
-        VoicePreset(id: "monster", name: "Monster", emoji: "👹", description: "Deep growling rumble with heavy low-end power", characterId: "drake", pitchShift: -9, indexRate: 0.90, isBuiltin: true),
-        VoicePreset(id: "stadium", name: "Stadium", emoji: "🏟️", description: "Huge announcement projection & wide room acoustics", characterId: "stadium", pitchShift: 0, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "alien", name: "Alien", emoji: "👽", description: "Modulated pitched vocal contour", characterId: "anime_heroine", pitchShift: 2, indexRate: 0.65, isBuiltin: true),
-        VoicePreset(id: "cave", name: "Cave", emoji: "🕳️", description: "Cavernous dark echoes and resonant depth", characterId: "drake", pitchShift: -3, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "underwater", name: "Underwater", emoji: "🌊", description: "Muffled low-pass filtering with submerged warmth", characterId: "drake", pitchShift: -4, indexRate: 0.70, isBuiltin: true),
-        VoicePreset(id: "megaphone", name: "Megaphone", emoji: "📣", description: "Punchy midrange PA horn presence", characterId: "eminem", pitchShift: 0, indexRate: 0.75, isBuiltin: true),
-        VoicePreset(id: "arcade", name: "Arcade", emoji: "🕹️", description: "8-bit crushed retro game cabinet voice", characterId: "eminem", pitchShift: 2, indexRate: 0.60, isBuiltin: true)
+        VoicePreset(id: "us_executive", name: "Executive", emoji: "🎙️", description: "Confident US executive presence with resonant lows", characterId: "american_executive", pitchShift: -2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "uk_authority", name: "Authority", emoji: "🏛️", description: "Calm British composure to de-escalate tension", characterId: "british_authority", pitchShift: -4, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "warm_expressive", name: "Warm Studio", emoji: "✨", description: "Natural vibrant timbre cloned from reference", characterId: "expressive_presence", pitchShift: 0, indexRate: 0.25, isBuiltin: true),
+        VoicePreset(id: "calm_negotiator", name: "Negotiator", emoji: "🤝", description: "Crisp presence with balanced mid projection", characterId: "australian_negotiator", pitchShift: 0, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "soothing_whisper", name: "Anti-Anxiety", emoji: "🍃", description: "Softened breathy vocal tone for low stimulation", characterId: "soothing_meditation", pitchShift: -2, indexRate: 0.2, isBuiltin: true),
+        VoicePreset(id: "spanish_warmth", name: "Spanish Warmth", emoji: "🌞", description: "Harmonic expressive contour with rich timbre", characterId: "spanish_warmth", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "french_elegance", name: "French Elegance", emoji: "🥐", description: "Refined melodic vocal texture with delicate air", characterId: "french_elegance", pitchShift: 2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "japanese_calm", name: "Japanese Serene", emoji: "🍵", description: "Clear, disciplined and articulate delivery", characterId: "japanese_calm", pitchShift: 1, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "deep_baritone", name: "Deep Resonance", emoji: "🗿", description: "Commanding lowered baritone authority", characterId: "american_executive", pitchShift: -5, indexRate: 0.4, isBuiltin: true),
+        VoicePreset(id: "broadcast_pro", name: "Broadcast Pro", emoji: "📻", description: "Tight radio presence with balanced warmth", characterId: "british_authority", pitchShift: -1, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "soft_whisper", name: "Whisper", emoji: "🤫", description: "Ultra-quiet vocal veil for private meetings", characterId: "soothing_meditation", pitchShift: -3, indexRate: 0.25, isBuiltin: true),
+        VoicePreset(id: "bright_clarity", name: "Bright Clarity", emoji: "💡", description: "Elevated clarity for noisy room environments", characterId: "australian_negotiator", pitchShift: 2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "intimate_studio", name: "Intimate Studio", emoji: "🎧", description: "Close-mic warmth cloned from reference", characterId: "expressive_presence", pitchShift: -1, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "diplomat", name: "Diplomat", emoji: "🕊️", description: "Measured, steady cadence and calm presence", characterId: "french_elegance", pitchShift: 0, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "zen_focus", name: "Zen Focus", emoji: "🧘", description: "Centered serenity for stress-free communication", characterId: "japanese_calm", pitchShift: -2, indexRate: 0.25, isBuiltin: true),
+        VoicePreset(id: "leadership", name: "Leadership", emoji: "⚡", description: "Resonant, clear tone with forward projection", characterId: "american_executive", pitchShift: 0, indexRate: 0.4, isBuiltin: true)
     ]
 
     @Published public var isRunning: Bool = false
@@ -224,8 +196,17 @@ public final class AudioController: ObservableObject {
     @Published public var pitchShiftSemitones: Float = 0.0 {
         didSet { updatePerformanceControls() }
     }
-    @Published public var indexRate: Float = 0.75 {
-        didSet { updatePerformanceControls() }
+    @Published public var toneColorTau: Float = 0.3 {
+        didSet {
+            Task { await OpenVoiceBridge.shared.setTau(tau: toneColorTau) }
+            updatePerformanceControls()
+        }
+    }
+    @Published public var indexRate: Float = 0.3 {
+        didSet {
+            toneColorTau = indexRate
+            updatePerformanceControls()
+        }
     }
     @Published public var silenceThreshold: Float = defaultSilenceThreshold {
         didSet { updatePerformanceControls() }
@@ -290,9 +271,9 @@ public final class AudioController: ObservableObject {
     private let rvcQueue = DispatchQueue(label: "com.rvc.processing.queue", qos: .userInteractive)
     public let rvcInference = RVCInference()
 
-    // 0.35s audio chunk accumulation (5600 samples @ 16kHz -> 17 HuBERT frames -> 16320 samples @ 48kHz)
-    private var accumulatedSamples16k: [Float] = []
-    private let targetChunkSamples16k: Int = 5600
+    // Low-latency chunk accumulation for OpenVoice V2 (8192 samples @ 22050Hz ≈ 0.37s)
+    private var accumulatedSamples: [Float] = []
+    private let targetChunkSamples: Int = 8192
     private var isProcessingChunk: Bool = false
     private var currentInferenceTask: Task<Void, Never>? = nil
 
@@ -363,13 +344,8 @@ public final class AudioController: ObservableObject {
     }
 
     public func updatePerformanceControls() {
-        if isNeuralModelLoaded {
-            // Neural RVC handles pitch shift internally inside the generator
-            pitchNode.pitch = 0.0
-        } else {
-            // Real-Time MLX Voice Transformer: pitch is in cents (1 semitone = 100 cents)
-            pitchNode.pitch = pitchShiftSemitones * 100.0
-        }
+        // Real-Time pitch shift: 1 semitone = 100 cents (OpenVoice ToneColorConverter preserves natural vocal pitch contour)
+        pitchNode.pitch = pitchShiftSemitones * 100.0
 
         // Apply character-specific acoustic formant EQ filtering
         if eqNode.bands.count >= 2 {
@@ -548,31 +524,29 @@ public final class AudioController: ObservableObject {
     public func checkModelFiles(character: VoiceCharacter) -> (hasModel: Bool, hasHubert: Bool, hasRMVPE: Bool, hasIndex: Bool, missing: [String]) {
         let fileManager = FileManager.default
         let modelsDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("RVCModels") ?? URL(fileURLWithPath: "/tmp/RVCModels")
+            .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
         
-        let modelURL = modelsDir.appendingPathComponent(character.modelFileName)
-        let hubertURL = modelsDir.appendingPathComponent("hubert_base.safetensors")
-        let rmvpeURL = modelsDir.appendingPathComponent("rmvpe.safetensors")
-        let indexURL = modelsDir.appendingPathComponent(character.indexFileName)
+        let ckptURL = modelsDir.appendingPathComponent("checkpoint.pth")
+        let configURL = modelsDir.appendingPathComponent("config.json")
+        let seURL = modelsDir.appendingPathComponent(character.speakerEmbeddingFileName)
         
         var missing: [String] = []
-        let hasModel = fileManager.fileExists(atPath: modelURL.path) && ((try? fileManager.attributesOfItem(atPath: modelURL.path)[.size] as? Int64) ?? 0) > 100_000
-        if !hasModel { missing.append(character.modelFileName) }
+        let hasCkpt = fileManager.fileExists(atPath: ckptURL.path) && ((try? fileManager.attributesOfItem(atPath: ckptURL.path)[.size] as? Int64) ?? 0) > 10_000_000
+        if !hasCkpt { missing.append("checkpoint.pth") }
         
-        let hasHubert = fileManager.fileExists(atPath: hubertURL.path) && ((try? fileManager.attributesOfItem(atPath: hubertURL.path)[.size] as? Int64) ?? 0) > 100_000
-        if !hasHubert { missing.append("hubert_base.safetensors") }
+        let hasConfig = fileManager.fileExists(atPath: configURL.path)
+        if !hasConfig { missing.append("config.json") }
         
-        let hasRMVPE = fileManager.fileExists(atPath: rmvpeURL.path) && ((try? fileManager.attributesOfItem(atPath: rmvpeURL.path)[.size] as? Int64) ?? 0) > 100_000
-        if !hasRMVPE { missing.append("rmvpe.safetensors") }
+        let hasSE = fileManager.fileExists(atPath: seURL.path)
+        if !hasSE { missing.append(character.speakerEmbeddingFileName) }
         
-        let hasIndex = fileManager.fileExists(atPath: indexURL.path)
-        
-        return (hasModel, hasHubert, hasRMVPE, hasIndex, missing)
+        return (hasModel: hasCkpt, hasHubert: hasConfig, hasRMVPE: hasSE, hasIndex: true, missing: missing)
     }
 
     public func loadCharacterWeights(character: VoiceCharacter) {
         loadWeightsTask?.cancel()
         pitchShiftSemitones = Float(character.defaultPitch)
+        toneColorTau = character.defaultTau
         updatePerformanceControls()
 
         let check = checkModelFiles(character: character)
@@ -590,30 +564,28 @@ public final class AudioController: ObservableObject {
 
         loadWeightsTask = Task { [weak self] in
             let modelsDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("RVCModels") ?? URL(fileURLWithPath: "/tmp/RVCModels")
-            
-            let modelURL = modelsDir.appendingPathComponent(character.modelFileName)
-            let indexURL = modelsDir.appendingPathComponent(character.indexFileName)
-            let hubertURL = modelsDir.appendingPathComponent("hubert_base.safetensors")
-            let rmvpeURL = modelsDir.appendingPathComponent("rmvpe.safetensors")
+                .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
+            let seURL = modelsDir.appendingPathComponent(character.speakerEmbeddingFileName)
 
             do {
                 let startTime = CFAbsoluteTimeGetCurrent()
                 guard let self = self, !Task.isCancelled else { return }
-                try await self.rvcInference.loadWeights(hubertURL: hubertURL, modelURL: modelURL, rmvpeURL: rmvpeURL)
-                guard !Task.isCancelled else { return }
-                if check.hasIndex {
-                    try? self.rvcInference.loadIndex(url: indexURL, rate: self.indexRate)
+
+                guard FileManager.default.fileExists(atPath: seURL.path) else {
+                    throw NSError(domain: "OpenVoice", code: 404, userInfo: [NSLocalizedDescriptionKey: "Voice profile \(character.speakerEmbeddingFileName) not found."])
                 }
-                guard !Task.isCancelled else { return }
+
+                await OpenVoiceBridge.shared.setTargetVoice(path: seURL.path)
+                await OpenVoiceBridge.shared.setTau(tau: self.toneColorTau)
+                
                 let loadDurationMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
 
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
                     self.isNeuralModelLoaded = true
-                    self.loadedComponents = (hubert: true, rmvpe: true, synth: true, index: check.hasIndex)
-                    self.modelLoadStatus = .ready(character: character.name, hasIndex: check.hasIndex, latencyMs: loadDurationMs)
-                    self.statusMessage = "Neural RVC Active: \(character.name)"
+                    self.loadedComponents = (hubert: true, rmvpe: true, synth: true, index: true)
+                    self.modelLoadStatus = .ready(character: character.name, hasIndex: true, latencyMs: loadDurationMs)
+                    self.statusMessage = "OpenVoice V2 Active: \(character.name)"
                     self.updatePerformanceControls()
                 }
             } catch {
@@ -639,29 +611,20 @@ public final class AudioController: ObservableObject {
         testSynthesisStatus = "Testing synthesis..."
         Task {
             do {
-                // Generate 0.35s harmonic tone test chunk (5600 samples @ 16kHz)
-                var testAudio = [Float](repeating: 0, count: 5600)
-                for i in 0..<5600 {
-                    let t = Float(i) / 16000.0
+                // Generate 0.5s harmonic tone test chunk (11025 samples @ 22050Hz)
+                var testAudio = [Float](repeating: 0, count: 11025)
+                for i in 0..<11025 {
+                    let t = Float(i) / 22050.0
                     testAudio[i] = 0.3 * sin(2.0 * .pi * 220.0 * t) + 0.15 * sin(2.0 * .pi * 440.0 * t)
                 }
 
                 let start = CFAbsoluteTimeGetCurrent()
-                let mlxInput = MLXArray(testAudio)
-                let synth = try await rvcInference.inferChunk(
-                    chunk: mlxInput,
-                    pitchShift: Int(pitchShiftSemitones.rounded()),
-                    f0Method: "rmvpe",
-                    indexRate: indexRate
-                )
-                MLX.eval(synth)
+                let synth = try await OpenVoiceBridge.shared.convertChunk(samples: testAudio, tau: toneColorTau)
                 let duration = (CFAbsoluteTimeGetCurrent() - start) * 1000
 
-                let squeezed = synth.reshaped([-1]).asType(Float.self)
-                let samples = squeezed.asArray(Float.self)
-                schedulePlayback(samples: samples, sampleRate: Double(rvcInference.modelSampleRate))
+                schedulePlayback(samples: synth, sampleRate: OpenVoiceBridge.shared.modelSampleRate)
 
-                self.testSynthesisStatus = "✅ Working! Converted in \(Int(duration))ms (\(samples.count) samples played)"
+                self.testSynthesisStatus = "✅ Working! Converted in \(Int(duration))ms (\(synth.count) samples played)"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
                     if self.testSynthesisStatus?.starts(with: "✅") == true {
                         self.testSynthesisStatus = nil
@@ -700,10 +663,11 @@ public final class AudioController: ObservableObject {
         downloadTask = Task {
             let fileManager = FileManager.default
             let modelsDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("RVCModels") ?? URL(fileURLWithPath: "/tmp/RVCModels")
+                .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
+            let sesDir = modelsDir.appendingPathComponent("ses")
             
             do {
-                try fileManager.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+                try fileManager.createDirectory(at: sesDir, withIntermediateDirectories: true)
 
                 // Dedicated URLSession with request timeout to prevent indefinite stalling
                 let config = URLSessionConfiguration.default
@@ -712,24 +676,30 @@ public final class AudioController: ObservableObject {
                 config.waitsForConnectivity = true
                 let session = URLSession(configuration: config)
 
-                let downloads: [(name: String, fileName: String, urlString: String, weight: Double)] = [
+                let downloads: [(name: String, path: URL, urlString: String, weight: Double)] = [
                     (
-                        name: "RMVPE Pitch Tracker",
-                        fileName: "rmvpe.safetensors",
-                        urlString: "https://huggingface.co/AEmotionStudio/rvc-models/resolve/main/rmvpe.safetensors",
-                        weight: 0.40
+                        name: "OpenVoice V2 ToneColor Checkpoint",
+                        path: modelsDir.appendingPathComponent("checkpoint.pth"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/resolve/main/converter/checkpoint.pth",
+                        weight: 0.85
                     ),
                     (
-                        name: "HuBERT Acoustic Model",
-                        fileName: "hubert_base.safetensors",
-                        urlString: "https://huggingface.co/lexandstuff/mlx-contentvec/resolve/main/contentvec_base.safetensors",
-                        weight: 0.30
+                        name: "OpenVoice Config",
+                        path: modelsDir.appendingPathComponent("config.json"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/raw/main/converter/config.json",
+                        weight: 0.05
                     ),
                     (
-                        name: "Neural Voice Synthesizer",
-                        fileName: "f0G48k.safetensors",
-                        urlString: "https://huggingface.co/AEmotionStudio/rvc-models/resolve/main/pretrained_v2/f0G48k.safetensors",
-                        weight: 0.30
+                        name: "US English Voice Profile",
+                        path: sesDir.appendingPathComponent("en-us.pth"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/resolve/main/base_speakers/ses/en-us.pth",
+                        weight: 0.05
+                    ),
+                    (
+                        name: "British English Voice Profile",
+                        path: sesDir.appendingPathComponent("en-default.pth"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/resolve/main/base_speakers/ses/en-default.pth",
+                        weight: 0.05
                     )
                 ]
 
@@ -738,10 +708,9 @@ public final class AudioController: ObservableObject {
                 for item in downloads {
                     if Task.isCancelled { break }
 
-                    let targetURL = modelsDir.appendingPathComponent(item.fileName)
-                    if fileManager.fileExists(atPath: targetURL.path),
-                       let attrs = try? fileManager.attributesOfItem(atPath: targetURL.path),
-                       let size = attrs[.size] as? Int64, size > 1_000_000 {
+                    if fileManager.fileExists(atPath: item.path.path),
+                       let attrs = try? fileManager.attributesOfItem(atPath: item.path.path),
+                       let size = attrs[.size] as? Int64, size > 1_000 {
                         // Already downloaded and valid
                         completedWeight += item.weight
                         self.downloadProgress = completedWeight
@@ -755,7 +724,7 @@ public final class AudioController: ObservableObject {
 
                     let (tempLocation, response) = try await session.download(from: remoteURL)
                     if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
-                        throw NSError(domain: "RVCDownload", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(httpResponse.statusCode)"])
+                        throw NSError(domain: "OpenVoiceDownload", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(httpResponse.statusCode)"])
                     }
 
                     if Task.isCancelled {
@@ -763,10 +732,10 @@ public final class AudioController: ObservableObject {
                         break
                     }
 
-                    if fileManager.fileExists(atPath: targetURL.path) {
-                        try? fileManager.removeItem(at: targetURL)
+                    if fileManager.fileExists(atPath: item.path.path) {
+                        try? fileManager.removeItem(at: item.path)
                     }
-                    try fileManager.moveItem(at: tempLocation, to: targetURL)
+                    try fileManager.moveItem(at: tempLocation, to: item.path)
 
                     completedWeight += item.weight
                     self.downloadProgress = min(1.0, completedWeight)
@@ -781,31 +750,14 @@ public final class AudioController: ObservableObject {
                     return
                 }
 
-                // Map/link base generator to character model filenames if not already present
-                let baseGenerator = modelsDir.appendingPathComponent("f0G48k.safetensors")
-                if fileManager.fileExists(atPath: baseGenerator.path) {
-                    for char in Self.availableCharacters {
-                        let charModelURL = modelsDir.appendingPathComponent(char.modelFileName)
-                        if !fileManager.fileExists(atPath: charModelURL.path) {
-                            try? fileManager.copyItem(at: baseGenerator, to: charModelURL)
-                        }
-                    }
-                }
-
                 self.downloadProgress = 1.0
                 self.isDownloading = false
                 self.statusMessage = "All neural models downloaded & ready!"
-                // Load whatever character is currently selected
                 self.loadCharacterWeights(character: self.selectedCharacter)
-
             } catch {
-                if Task.isCancelled {
-                    self.statusMessage = "Download cancelled."
-                } else {
-                    self.statusMessage = "Download stalled or failed: \(error.localizedDescription). Click retry."
-                    self.modelLoadStatus = .failed(error: error.localizedDescription)
-                }
                 self.isDownloading = false
+                self.statusMessage = "Download failed: \(error.localizedDescription)"
+                self.modelLoadStatus = .failed(error: error.localizedDescription)
             }
         }
     }
@@ -1001,7 +953,7 @@ public final class AudioController: ObservableObject {
         errorMessage = nil
         userStopped = false
         Self.configureMetalLibrary()
-        accumulatedSamples16k.removeAll(keepingCapacity: true)
+        accumulatedSamples.removeAll(keepingCapacity: true)
         currentInferenceTask?.cancel()
         currentInferenceTask = nil
         isProcessingChunk = false
@@ -1235,7 +1187,7 @@ public final class AudioController: ObservableObject {
         outputLevel = 0.0
         errorMessage = nil
         if isNeuralModelLoaded {
-            statusMessage = "Neural RVC Active: \(selectedCharacter.name)"
+            statusMessage = "OpenVoice V2 Active: \(selectedCharacter.name)"
         } else {
             statusMessage = "Model weights not downloaded — Audio muted"
         }
@@ -1278,14 +1230,14 @@ public final class AudioController: ObservableObject {
             self.rawInputRMS = rms
         }
 
-        let downsampled = filteredData.withUnsafeBufferPointer { ptr -> [Float] in
+        let resampled = filteredData.withUnsafeBufferPointer { ptr -> [Float] in
             guard let base = ptr.baseAddress else { return [] }
-            return self.resampleTo16k(channelData: base, count: activeCount, fromRate: fromRate)
+            return self.resample(samples: Array(UnsafeBufferPointer(start: base, count: activeCount)), fromRate: fromRate, toRate: OpenVoiceBridge.shared.modelSampleRate)
         }
 
         Task { @MainActor in
             guard self.isRunning else { return }
-            self.accumulatedSamples16k.append(contentsOf: downsampled)
+            self.accumulatedSamples.append(contentsOf: resampled)
             self.processNextChunkIfAvailable()
         }
     }
@@ -1295,14 +1247,14 @@ public final class AudioController: ObservableObject {
         guard isRunning && !isProcessingChunk else { return }
 
         // Drop backlog if accumulated samples exceed 2 chunks to avoid latency buildup
-        if accumulatedSamples16k.count > targetChunkSamples16k * 2 {
-            accumulatedSamples16k.removeFirst(accumulatedSamples16k.count - targetChunkSamples16k * 2)
+        if accumulatedSamples.count > targetChunkSamples * 2 {
+            accumulatedSamples.removeFirst(accumulatedSamples.count - targetChunkSamples * 2)
         }
 
-        guard accumulatedSamples16k.count >= targetChunkSamples16k else { return }
+        guard accumulatedSamples.count >= targetChunkSamples else { return }
 
-        let chunkToProcess = Array(accumulatedSamples16k.prefix(targetChunkSamples16k))
-        accumulatedSamples16k.removeFirst(targetChunkSamples16k)
+        let chunkToProcess = Array(accumulatedSamples.prefix(targetChunkSamples))
+        accumulatedSamples.removeFirst(targetChunkSamples)
 
         var chunkRms: Float = 0
         vDSP_rmsqv(chunkToProcess, 1, &chunkRms, vDSP_Length(chunkToProcess.count))
@@ -1316,14 +1268,14 @@ public final class AudioController: ObservableObject {
             currentInferenceTask?.cancel()
             currentInferenceTask = nil
             isProcessingChunk = false
-            accumulatedSamples16k.removeAll(keepingCapacity: true)
+            accumulatedSamples.removeAll(keepingCapacity: true)
             if playerNode.isPlaying {
                 playerNode.stop()
                 playerNode.reset()
             }
         } else {
             isVoiceActive = true
-            processAudioChunk(chunk16k: chunkToProcess)
+            processAudioChunk(chunk22k: chunkToProcess)
         }
     }
 
@@ -1345,7 +1297,7 @@ public final class AudioController: ObservableObject {
         playerNode.stop()
         playerNode.reset()
         engine.stop()
-        accumulatedSamples16k.removeAll(keepingCapacity: false)
+        accumulatedSamples.removeAll(keepingCapacity: false)
         isRunning = false
         isConverting = false
         isVoiceActive = false
@@ -1355,10 +1307,10 @@ public final class AudioController: ObservableObject {
         outputLevel = 0.0
     }
 
-    // MARK: - MLX Audio Bridge
+    // MARK: - OpenVoice Audio Processing
 
-    public func processAudioChunk(chunk16k: [Float]) {
-        guard !chunk16k.isEmpty else { return }
+    public func processAudioChunk(chunk22k: [Float]) {
+        guard !chunk22k.isEmpty else { return }
 
         // If model is not loaded, strictly mute output and return immediately
         guard self.isNeuralModelLoaded else {
@@ -1368,7 +1320,7 @@ public final class AudioController: ObservableObject {
         }
 
         var chunkRms: Float = 0
-        vDSP_rmsqv(chunk16k, 1, &chunkRms, vDSP_Length(chunk16k.count))
+        vDSP_rmsqv(chunk22k, 1, &chunkRms, vDSP_Length(chunk22k.count))
 
         // Effective gate threshold: always enforce absoluteSilenceFloor even if silenceThreshold slider is 0.0
         let effectiveThreshold = max(Self.absoluteSilenceFloor, self.silenceThreshold)
@@ -1385,20 +1337,16 @@ public final class AudioController: ObservableObject {
         self.isProcessingChunk = true
         self.isSynthesizingChunk = true
 
-        let currentPitch = Int(self.pitchShiftSemitones.rounded())
-        let currentIndexRate = self.indexRate
+        let currentTau = self.toneColorTau
 
         currentInferenceTask?.cancel()
         currentInferenceTask = Task {
             let start = CFAbsoluteTimeGetCurrent()
             do {
-                // If model is not downloaded or not loaded, DO NOT output any sound on RVC tab!
                 guard !Task.isCancelled,
                       self.isRunning,
                       self.isVoiceActive,
-                      self.isNeuralModelLoaded,
-                      self.rvcInference.synthesizer != nil,
-                      self.rvcInference.hubertModel != nil else {
+                      self.isNeuralModelLoaded else {
                     self.outputLevel = 0.0
                     self.isSynthesizingChunk = false
                     self.isProcessingChunk = false
@@ -1406,17 +1354,11 @@ public final class AudioController: ObservableObject {
                     return
                 }
 
-                // 1. Convert captured Float buffer into MLXArray [T]
-                let mlxInputAudio = MLXArray(chunk16k)
-
-                // Pass through full MLX RVC pipeline (HuBERT -> RMVPE -> Index -> Synthesizer)
-                let mlxOutput = try await self.rvcInference.inferChunk(
-                    chunk: mlxInputAudio,
-                    pitchShift: currentPitch,
-                    f0Method: "rmvpe",
-                    indexRate: currentIndexRate
+                // Voice conversion via OpenVoice V2 Tone Color Converter
+                let convertedSamples = try await OpenVoiceBridge.shared.convertChunk(
+                    samples: chunk22k,
+                    tau: currentTau
                 )
-                MLX.eval(mlxOutput)
 
                 guard !Task.isCancelled, self.isRunning, self.isVoiceActive else {
                     self.outputLevel = 0.0
@@ -1426,20 +1368,18 @@ public final class AudioController: ObservableObject {
                     return
                 }
 
-                // Squeeze into [T_out]
-                let squeezed = mlxOutput.reshaped([-1]).asType(Float.self)
-                let finalSamples = squeezed.asArray(Float.self)
-                let outputSampleRate = Double(self.rvcInference.modelSampleRate)
+                var processed = convertedSamples
+                self.applyEdgeWindow(samples: &processed, rampLength: 64)
 
-                // 2. Convert MLXArray back into AVAudioPCMBuffer and schedule playback
-                self.schedulePlayback(samples: finalSamples, sampleRate: outputSampleRate)
+                // Schedule playback at OpenVoice 22,050 Hz
+                self.schedulePlayback(samples: processed, sampleRate: OpenVoiceBridge.shared.modelSampleRate)
 
                 let duration = (CFAbsoluteTimeGetCurrent() - start) * 1000
                 self.lastInferenceDurationMs = duration
                 self.isSynthesizingChunk = false
             } catch {
                 if !Task.isCancelled {
-                    print("MLX RVC Processing error: \(error)")
+                    print("OpenVoice Processing error: \(error)")
                 }
                 self.outputLevel = 0.0
                 self.isSynthesizingChunk = false
@@ -1448,6 +1388,11 @@ public final class AudioController: ObservableObject {
             self.isProcessingChunk = false
             self.processNextChunkIfAvailable()
         }
+    }
+
+    public func processAudioChunk(chunk16k: [Float]) {
+        let chunk22k = self.resample(samples: chunk16k, fromRate: 16000.0, toRate: OpenVoiceBridge.shared.modelSampleRate)
+        processAudioChunk(chunk22k: chunk22k)
     }
 
     private func applyEdgeWindow(samples: inout [Float], rampLength: Int = 96) {

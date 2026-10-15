@@ -5,7 +5,10 @@ import SwiftUI
 public struct MasterCalmHaloKnob: View {
     @Binding var value: Float            // 0.0 to 1.0 (Master Calm Level)
     var isVoiceActive: Bool
-    var activityRMS: Float
+    var activityRMS: Float = 0.0
+    var title: String = "MASTER CALM"
+    var displayValue: String? = nil
+    var accentColor: Color = SynthTheme.ledCyan
     var size: CGFloat = 190
 
     @StateObject private var dragState = KnobDragState()
@@ -15,11 +18,17 @@ public struct MasterCalmHaloKnob: View {
         value: Binding<Float>,
         isVoiceActive: Bool = false,
         activityRMS: Float = 0.0,
+        title: String = "MASTER CALM",
+        displayValue: String? = nil,
+        accentColor: Color = SynthTheme.ledCyan,
         size: CGFloat = 190
     ) {
         self._value = value
         self.isVoiceActive = isVoiceActive
         self.activityRMS = activityRMS
+        self.title = title
+        self.displayValue = displayValue
+        self.accentColor = accentColor
         self.size = size
     }
 
@@ -102,17 +111,19 @@ public struct MasterCalmHaloKnob: View {
                     calmLevel: value,
                     isVoiceActive: isVoiceActive,
                     activityRMS: activityRMS,
-                    accentColor: SynthTheme.ledCyan
+                    accentColor: accentColor
                 )
                 .frame(width: size * 0.88, height: size * 0.88)
                 .opacity(0.85)
 
                 // 5. CENTER READOUT OVERLAY (Glass HUD Badge)
                 VStack(spacing: size > 100 ? 2 : 1) {
-                    Text(String(format: "%.0f%%", value * 100))
-                        .font(.system(size: size > 140 ? 30 : (size > 90 ? 20 : 13), weight: .black, design: .rounded))
+                    Text(displayValue ?? String(format: "%.0f%%", value * 100))
+                        .font(.system(size: size > 140 ? (displayValue?.count ?? 0 > 4 ? 22 : 30) : (size > 90 ? 18 : 13), weight: .black, design: .rounded))
                         .foregroundColor(Color.white)
                         .shadow(color: Color.black.opacity(0.9), radius: 3)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
 
                     if size > 110 {
                         HStack(spacing: 4) {
@@ -121,7 +132,7 @@ public struct MasterCalmHaloKnob: View {
                                 .frame(width: 5, height: 5)
                                 .shadow(color: value > 0.01 ? SynthTheme.ledGreen : Color.clear, radius: 3)
 
-                            Text("MASTER CALM")
+                            Text(title)
                                 .font(.system(size: size > 150 ? 9 : 8, weight: .bold, design: .default))
                                 .foregroundColor(SynthTheme.textBright.opacity(0.9))
                                 .tracking(0.8)
@@ -137,7 +148,7 @@ public struct MasterCalmHaloKnob: View {
                 Circle()
                     .fill(Color.white)
                     .frame(width: size > 100 ? 7 : 5, height: size > 100 ? 7 : 5)
-                    .shadow(color: SynthTheme.ledCyan, radius: 4)
+                    .shadow(color: accentColor, radius: 4)
                     .offset(y: -trackDiameter / 2)
                     .rotationEffect(.degrees(-135.0 + currentSweepAngle))
             }

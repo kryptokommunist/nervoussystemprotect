@@ -13,3 +13,5 @@
 *.zip
 .system_generated/
 tmp/
+__pycache__/
+*.pyc
