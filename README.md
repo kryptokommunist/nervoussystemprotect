@@ -1,6 +1,16 @@
 # nervoussystemprotect (Model NSP-1)
 
-A native Apple Silicon macOS application combining **real-time CoreAudio DSP pitch modulation** and **pure Swift Apple MLX Neural Voice Conversion (RVC)** with zero Python, ONNX, or Core ML dependencies.
+> **A real-time stress firewall for meetings, calls, and audio recordings.**
+>
+> Most human stress, anxiety, and interpersonal tension are unconsciously transmitted through subtle micro-acoustic cues in the human voice: harsh transients, sharp high-frequency resonance, tense vocal fry, and unpredictable pitch spikes.
+>
+> For **neuroatypical (ADHD, autistic, sensory-sensitive, HSP)** and chronically fatigued individuals, prolonged exposure to these raw acoustic signals in remote meetings (Zoom, Google Meet, Teams) triggers sympathetic nervous system arousal ("fight-or-flight"), sensory overload, and cognitive exhaustion.
+>
+> **`nervoussystemprotect`** functions as an **in-line acoustic stress firewall**. Operating directly on macOS audio streams with sub-millisecond latency, it de-escalates stressful acoustic characteristics via warm Butterworth filtering, harmonic pitch dampening, and MLX neural tone color conversion—protecting your nervous system without degrading speech intelligibility or meeting presence.
+
+---
+
+A native Apple Silicon macOS application combining **real-time CoreAudio DSP pitch modulation** and **pure Swift Apple MLX Neural Voice Conversion (RVC / OpenVoice)** with zero cloud latency and zero Python, ONNX, or Core ML dependencies.
 
 ---
 
