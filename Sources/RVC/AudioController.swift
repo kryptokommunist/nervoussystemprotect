@@ -198,13 +198,17 @@ public final class AudioController: ObservableObject {
     }
     @Published public var toneColorTau: Float = 0.3 {
         didSet {
-            Task { await OpenVoiceBridge.shared.setTau(tau: toneColorTau) }
+            if abs(indexRate - toneColorTau) > 0.001 {
+                indexRate = toneColorTau
+            }
             updatePerformanceControls()
         }
     }
     @Published public var indexRate: Float = 0.3 {
         didSet {
-            toneColorTau = indexRate
+            if abs(toneColorTau - indexRate) > 0.001 {
+                toneColorTau = indexRate
+            }
             updatePerformanceControls()
         }
     }
@@ -271,9 +275,9 @@ public final class AudioController: ObservableObject {
     private let rvcQueue = DispatchQueue(label: "com.rvc.processing.queue", qos: .userInteractive)
     public let rvcInference = RVCInference()
 
-    // Low-latency chunk accumulation for OpenVoice V2 (8192 samples @ 22050Hz ≈ 0.37s)
+    // Low-latency chunk accumulation for OpenVoice V2 (7680 samples @ 22050Hz ≈ 0.348s = 30 STFT frames of hop 256)
     private var accumulatedSamples: [Float] = []
-    private let targetChunkSamples: Int = 8192
+    public let targetChunkSamples: Int = 7680
     private var isProcessingChunk: Bool = false
     private var currentInferenceTask: Task<Void, Never>? = nil
 

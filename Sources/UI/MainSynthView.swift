@@ -44,6 +44,27 @@ public struct MainSynthView: View {
                 window.setFrame(frame, display: true, animate: true)
             }
         }
+        .onChange(of: viewState.selectedTab) { _, newTab in
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                if newTab == 0 {
+                    if rvcController.isRunning {
+                        rvcController.userStopped = true
+                        rvcController.stop()
+                    }
+                    if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                        audioEngine.start()
+                    }
+                } else {
+                    if audioEngine.isRunning {
+                        audioEngine.userStopped = true
+                        audioEngine.stop()
+                    }
+                    if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                        rvcController.start()
+                    }
+                }
+            }
+        }
         .onAppear {
             guard !isTestingMode else { return }
             initializeDefaults()
@@ -139,19 +160,11 @@ public struct MainSynthView: View {
                     HStack(spacing: 4) {
                         ModeTabButton(
                             title: "Sensory Soother",
-                            icon: "waveform.path.ecg",
+                            icon: "waveform.path.badge.minus",
                             isSelected: viewState.selectedTab == 0
                         ) {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if viewState.selectedTab != 0 {
-                                    viewState.selectedTab = 0
-                                    if rvcController.isRunning {
-                                        rvcController.stop()
-                                    }
-                                    if !audioEngine.isRunning {
-                                        audioEngine.start()
-                                    }
-                                }
+                                viewState.selectedTab = 0
                             }
                         }
 
@@ -161,15 +174,7 @@ public struct MainSynthView: View {
                             isSelected: viewState.selectedTab == 1
                         ) {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if viewState.selectedTab != 1 {
-                                    viewState.selectedTab = 1
-                                    if audioEngine.isRunning {
-                                        audioEngine.stop()
-                                    }
-                                    if !rvcController.isRunning {
-                                        rvcController.start()
-                                    }
-                                }
+                                viewState.selectedTab = 1
                             }
                         }
                     }

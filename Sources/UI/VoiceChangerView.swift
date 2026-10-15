@@ -290,10 +290,7 @@ public struct VoiceChangerView: View {
                         Slider(
                             value: Binding(
                                 get: { controller.toneColorTau },
-                                set: {
-                                    controller.toneColorTau = round($0 * 20.0) / 20.0
-                                    controller.indexRate = controller.toneColorTau
-                                }
+                                set: { controller.toneColorTau = round($0 * 20.0) / 20.0 }
                             ),
                             in: 0.05...1.0
                         )
