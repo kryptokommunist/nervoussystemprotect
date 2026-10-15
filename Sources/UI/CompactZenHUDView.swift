@@ -571,11 +571,7 @@ public struct CompactZenHUDView: View {
             ForEach(presets) { preset in
                 Button(action: {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                        rvcController.pitchShiftSemitones = preset.pitchShift
-                        rvcController.indexRate = preset.indexRate
-                        if let char = AudioController.availableCharacters.first(where: { $0.id == preset.characterId }) {
-                            rvcController.selectedCharacter = char
-                        }
+                        rvcController.applyPreset(preset)
                     }
                 }) {
                     HStack(spacing: 3) {
@@ -584,15 +580,15 @@ public struct CompactZenHUDView: View {
                         Text(preset.name)
                             .font(.system(size: 8, weight: .semibold, design: .default))
                     }
-                    .foregroundColor(rvcController.selectedCharacter.id == preset.characterId ? Color.black : SynthTheme.textBright)
+                    .foregroundColor(rvcController.selectedPresetId == preset.id ? Color.black : SynthTheme.textBright)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 4.5)
                     .background(
                         RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(rvcController.selectedCharacter.id == preset.characterId ? SynthTheme.ledPurple : Color.black.opacity(0.4))
+                            .fill(rvcController.selectedPresetId == preset.id ? SynthTheme.ledPurple : Color.black.opacity(0.4))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                    .stroke(rvcController.selectedCharacter.id == preset.characterId ? SynthTheme.ledPurple : Color.white.opacity(0.08), lineWidth: 0.8)
+                                    .stroke(rvcController.selectedPresetId == preset.id ? SynthTheme.ledPurple : Color.white.opacity(0.08), lineWidth: 0.8)
                             )
                     )
                 }
