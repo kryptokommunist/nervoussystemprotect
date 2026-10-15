@@ -262,7 +262,7 @@ public struct VoiceChangerView: View {
                             Spacer()
                             Text(String(format: "%+.0f st", controller.pitchShiftSemitones))
                                 .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                                .foregroundColor(SynthTheme.ledCyan)
+                                .foregroundColor(SynthTheme.ledPurple)
                         }
 
                         Slider(
@@ -272,7 +272,7 @@ public struct VoiceChangerView: View {
                             ),
                             in: -12.0...12.0
                         )
-                        .accentColor(SynthTheme.ledCyan)
+                        .accentColor(SynthTheme.ledPurple)
                     }
 
                     // Tone Color Strength (Tau) Slider
@@ -374,7 +374,7 @@ public struct VoiceChangerView: View {
                         LevelBar(
                             title: "VOICE",
                             level: controller.outputLevel,
-                            color: controller.isNeuralModelLoaded ? SynthTheme.ledGreen : Color.red.opacity(0.3),
+                            color: controller.isNeuralModelLoaded ? SynthTheme.ledPurple : Color.red.opacity(0.3),
                             subtitle: !controller.isNeuralModelLoaded ? "MUTED" : nil
                         )
                     }
