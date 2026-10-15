@@ -413,7 +413,7 @@ public struct CompactZenHUDView: View {
                     Circle()
                         .fill(audioEngine.isBypassed ? SynthTheme.ledAmber : Color.white.opacity(0.25))
                         .frame(width: 4.5, height: 4.5)
-                    Text(audioEngine.isBypassed ? "BYPASS ON" : "Bypass")
+                    Text(audioEngine.isBypassed ? "BYPASS ON" : "BYPASS")
                         .font(.system(size: 8, weight: .semibold, design: .default))
                         .foregroundColor(audioEngine.isBypassed ? SynthTheme.ledAmber : SynthTheme.textDim)
                 }
@@ -449,7 +449,7 @@ public struct CompactZenHUDView: View {
                     .foregroundColor(SynthTheme.textMuted)
 
                 VerticalCompactMeter(
-                    level: rvcController.rawInputRMS * 8.0,
+                    level: rvcController.inputLevel,
                     color: SynthTheme.ledGreen
                 )
                 .frame(height: 105)
@@ -472,7 +472,7 @@ public struct CompactZenHUDView: View {
                 MasterCalmHaloKnob(
                     value: pitchProgressBinding,
                     isVoiceActive: rvcController.isVoiceActive,
-                    activityRMS: rvcController.rawInputRMS * 4.0,
+                    activityRMS: rvcController.inputLevel,
                     title: "PITCH SHIFT",
                     displayValue: String(format: "%+.0f st", rvcController.pitchShiftSemitones),
                     accentColor: SynthTheme.ledPurple,
