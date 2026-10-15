@@ -92,7 +92,7 @@ public struct CompactZenHUDView: View {
                     AppLogoView(size: 24)
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("nervoussystemprotect")
+                        Text("Nervous System Protect")
                             .font(.system(size: 12.5, weight: .bold, design: .default))
                             .foregroundColor(SynthTheme.textBright)
 
@@ -145,8 +145,8 @@ public struct CompactZenHUDView: View {
 
                 // 2. SUB-HEADER: INTERACTIVE SOURCE & DESTINATION PICKERS + ENGINE STATUS
                 HStack(spacing: 6) {
-                    let currentInput = (selectedTab == 0 ? audioEngine.selectedInputDevice : rvcController.selectedInputDevice)
-                    let currentOutput = (selectedTab == 0 ? audioEngine.selectedOutputDevice : rvcController.selectedOutputDevice)
+                    let currentInput = (selectedTab == 0 ? audioEngine.selectedInputDevice : rvcController.selectedInputDevice) ?? audioEngine.selectedInputDevice ?? rvcController.selectedInputDevice
+                    let currentOutput = (selectedTab == 0 ? audioEngine.selectedOutputDevice : rvcController.selectedOutputDevice) ?? audioEngine.selectedOutputDevice ?? rvcController.selectedOutputDevice
 
                     // INTERACTIVE AUDIO SOURCE PICKER MENU
                     Menu {
@@ -239,6 +239,10 @@ public struct CompactZenHUDView: View {
                                     audioEngine.stop()
                                 } else {
                                     audioEngine.userStopped = false
+                                    if rvcController.isRunning {
+                                        rvcController.userStopped = true
+                                        rvcController.stop()
+                                    }
                                     audioEngine.start()
                                 }
                             }
@@ -256,6 +260,10 @@ public struct CompactZenHUDView: View {
                                     rvcController.stop()
                                 } else {
                                     rvcController.userStopped = false
+                                    if audioEngine.isRunning {
+                                        audioEngine.userStopped = true
+                                        audioEngine.stop()
+                                    }
                                     rvcController.start()
                                 }
                             }
