@@ -51,7 +51,7 @@ def main():
 
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(SOCKET_PATH)
-    server.listen(1)
+    server.listen(128)
 
     while True:
         try:
@@ -131,9 +131,11 @@ def main():
 
                 elif cmd == "CONVERT_CHUNK":
                     # Binary chunk streaming
-                    # Expect: CONVERT_CHUNK <num_bytes>
+                    # Expect: CONVERT_CHUNK <num_bytes> [tau]
                     try:
                         num_bytes = int(parts[1])
+                        chunk_tau = float(parts[2]) if len(parts) > 2 else tau
+                        tau = chunk_tau
                         raw_data = file_obj.read(num_bytes)
                         samples = np.frombuffer(raw_data, dtype=np.float32)
 
@@ -154,7 +156,7 @@ def main():
                                 spec_lengths,
                                 sid_src=src_se,
                                 sid_tgt=tgt_se,
-                                tau=tau
+                                tau=chunk_tau
                             )[0][0, 0].data.cpu().float().numpy()
 
                         out_bytes = audio_out.astype(np.float32).tobytes()

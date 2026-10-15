@@ -204,24 +204,6 @@ public struct MainSynthView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Collapse to the minimalist floating companion HUD (Concept 4)")
-
-                    // Engine Status Pill
-                    let isCurrentRunning = (viewState.selectedTab == 0) ? audioEngine.isRunning : rvcController.isRunning
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(isCurrentRunning ? SynthTheme.ledGreen : Color.red.opacity(0.8))
-                            .frame(width: 7, height: 7)
-                            .shadow(color: isCurrentRunning ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
-
-                        Text(isCurrentRunning ? "ACTIVE" : "STANDBY")
-                            .font(.system(size: 9, weight: .bold, design: .default))
-                            .foregroundColor(isCurrentRunning ? SynthTheme.ledGreen : SynthTheme.textDim)
-                    }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Color.black.opacity(0.35))
-                    .cornerRadius(6)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.06), lineWidth: 1))
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)

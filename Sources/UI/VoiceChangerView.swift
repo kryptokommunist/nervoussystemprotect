@@ -41,47 +41,6 @@ public struct VoiceChangerView: View {
                         .font(.system(size: 9, weight: .medium, design: .default))
                         .foregroundColor(SynthTheme.textDim)
                 }
-
-                Spacer()
-
-                // Start/Stop Toggle
-                Button(action: {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                        if controller.isRunning {
-                            controller.userStopped = true
-                            controller.stop()
-                        } else {
-                            controller.userStopped = false
-                            controller.start()
-                        }
-                    }
-                }) {
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(controller.isRunning ? SynthTheme.ledGreen : Color.red.opacity(0.8))
-                            .frame(width: 7, height: 7)
-                            .shadow(color: controller.isRunning ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
-
-                        Text(controller.isRunning ? "STOP VOICE" : "START VOICE")
-                            .font(.system(size: 9.5, weight: .bold, design: .default))
-                            .foregroundColor(Color.white)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(
-                                controller.isRunning ?
-                                LinearGradient(colors: [Color(red: 0.08, green: 0.38, blue: 0.18), Color(red: 0.05, green: 0.25, blue: 0.10)], startPoint: .top, endPoint: .bottom) :
-                                LinearGradient(colors: [Color(red: 0.40, green: 0.12, blue: 0.14), Color(red: 0.28, green: 0.08, blue: 0.09)], startPoint: .top, endPoint: .bottom)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .stroke(controller.isRunning ? SynthTheme.ledGreen.opacity(0.7) : Color.red.opacity(0.5), lineWidth: 1)
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
             }
             .padding(.top, 2)
 
@@ -419,7 +378,7 @@ public struct VoiceChangerView: View {
                             title: "VOICE",
                             level: controller.outputLevel,
                             color: controller.isNeuralModelLoaded ? SynthTheme.ledGreen : Color.red.opacity(0.3),
-                            subtitle: !controller.isNeuralModelLoaded ? "MUTED" : (!controller.isVoiceActive ? "GATE" : nil)
+                            subtitle: !controller.isNeuralModelLoaded ? "MUTED" : nil
                         )
                     }
                     .padding(.top, 4)

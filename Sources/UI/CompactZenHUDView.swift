@@ -230,7 +230,7 @@ public struct CompactZenHUDView: View {
                         // Soother Active State Toggle
                         statusButton(
                             isActive: audioEngine.isRunning,
-                            activeLabel: "SOOTHER ACTIVE",
+                            activeLabel: "ACTIVE",
                             inactiveLabel: "STANDBY"
                         ) {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
@@ -247,8 +247,8 @@ public struct CompactZenHUDView: View {
                         // Neural Voice Active State Toggle
                         statusButton(
                             isActive: rvcController.isRunning,
-                            activeLabel: "RVC ACTIVE",
-                            inactiveLabel: "RVC STANDBY"
+                            activeLabel: "ACTIVE",
+                            inactiveLabel: "STANDBY"
                         ) {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
                                 if rvcController.isRunning {
@@ -332,7 +332,7 @@ public struct CompactZenHUDView: View {
                     size: 155
                 )
 
-                Text(audioEngine.isBypassed ? "DSP BYPASSED" : (audioEngine.masterDamping > 0.05 ? "Acoustic De-escalation Active" : "Natural Transparent Audio"))
+                Text(audioEngine.isBypassed ? "DSP Bypassed" : (audioEngine.masterDamping > 0.05 ? "Soothing Damping Engaged" : "Natural Transparent Audio"))
                     .font(.system(size: 8, weight: .medium, design: .default))
                     .foregroundColor(audioEngine.isBypassed ? SynthTheme.ledAmber : (audioEngine.masterDamping > 0.05 ? SynthTheme.ledCyan : SynthTheme.textDim))
             }
@@ -436,9 +436,9 @@ public struct CompactZenHUDView: View {
                     .font(.system(size: 7.5, weight: .bold, design: .default))
                     .foregroundColor(SynthTheme.textDim)
 
-                Text(rvcController.isVoiceActive ? "ACTIVE" : "GATED")
-                    .font(.system(size: 7, weight: .semibold, design: .default))
-                    .foregroundColor(rvcController.isVoiceActive ? SynthTheme.ledGreen : SynthTheme.textMuted)
+                Text("LEVEL")
+                    .font(.system(size: 7, weight: .medium, design: .default))
+                    .foregroundColor(SynthTheme.textMuted)
 
                 VerticalCompactMeter(
                     level: rvcController.rawInputRMS * 8.0,
@@ -448,7 +448,7 @@ public struct CompactZenHUDView: View {
 
                 HStack(spacing: 3) {
                     Circle().fill(rvcController.isVoiceActive ? SynthTheme.ledGreen : Color.white.opacity(0.3)).frame(width: 3.5, height: 3.5)
-                    Text("GATE")
+                    Text(rvcController.isVoiceActive ? "OPEN" : "GATED")
                         .font(.system(size: 7, weight: .bold, design: .default))
                         .foregroundColor(rvcController.isVoiceActive ? SynthTheme.ledGreen : SynthTheme.textDim)
                 }
@@ -515,11 +515,11 @@ public struct CompactZenHUDView: View {
                 .menuStyle(.borderlessButton)
                 .help("Select Neural Voice Character Model")
 
-                Text(rvcController.isRunning ?
-                     (rvcController.isSynthesizingChunk ? "⚡ Synthesizing live audio (\(Int(rvcController.lastInferenceDurationMs))ms)" : "Neural Timbre Ready • \(rvcController.selectedCharacter.name)") :
-                     "Engine Standby • Click RVC ACTIVE to Start")
+                Text(rvcController.isSynthesizingChunk ?
+                     "⚡ Synthesizing (\(Int(rvcController.lastInferenceDurationMs))ms)" :
+                     "Neural Timbre • \(rvcController.selectedCharacter.name)")
                     .font(.system(size: 7.5, weight: .medium, design: .default))
-                    .foregroundColor(rvcController.isRunning ? SynthTheme.ledGreen : SynthTheme.textDim)
+                    .foregroundColor(rvcController.isSynthesizingChunk ? SynthTheme.ledCyan : SynthTheme.textDim)
                     .lineLimit(1)
             }
 
