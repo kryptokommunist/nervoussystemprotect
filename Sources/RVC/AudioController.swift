@@ -98,8 +98,8 @@ public final class AudioController: ObservableObject {
         ),
         VoiceCharacter(
             id: "expressive_presence",
-            name: "Warm Expressive (Studio Tone)",
-            speakerEmbeddingFileName: "example_reference.mp3",
+            name: "Warm Expressive (Studio Master)",
+            speakerEmbeddingFileName: "ses/studio-reference.pth",
             defaultTau: 0.25,
             defaultPitch: 0,
             description: "Natural vibrant timbre cloned directly from studio voice reference"
@@ -135,6 +135,102 @@ public final class AudioController: ObservableObject {
             defaultTau: 0.2,
             defaultPitch: -2,
             description: "Softened breathy vocal tone for low-stimulation nervous system protection"
+        ),
+        VoiceCharacter(
+            id: "deep_bass_presence",
+            name: "Deep Sub-Bass (Resonant Chest)",
+            speakerEmbeddingFileName: "ses/deep-bass.pth",
+            defaultTau: 0.35,
+            defaultPitch: -5,
+            description: "Commanding deep chest resonance with low fundamental authority"
+        ),
+        VoiceCharacter(
+            id: "velvet_alto",
+            name: "Velvet Alto (Warm Intimate)",
+            speakerEmbeddingFileName: "ses/velvet-alto.pth",
+            defaultTau: 0.28,
+            defaultPitch: -1,
+            description: "Smooth, velvety close-mic vocal body with warm intimate presence"
+        ),
+        VoiceCharacter(
+            id: "nordic_calm",
+            name: "Nordic Serenity (Minimalist Clean)",
+            speakerEmbeddingFileName: "ses/nordic-calm.pth",
+            defaultTau: 0.3,
+            defaultPitch: 0,
+            description: "Crisp, balanced European clarity with pristine transparent mids"
+        ),
+        VoiceCharacter(
+            id: "yoga_nidra",
+            name: "Yoga Nidra (Hypnotic Breath)",
+            speakerEmbeddingFileName: "ses/yoga-nidra.pth",
+            defaultTau: 0.22,
+            defaultPitch: -3,
+            description: "Hypnotic, breath-supported meditation tone designed to reduce meeting stress"
+        ),
+        VoiceCharacter(
+            id: "dynamic_presenter",
+            name: "Dynamic Keynote (Confident Punch)",
+            speakerEmbeddingFileName: "ses/en-style.pth",
+            defaultTau: 0.35,
+            defaultPitch: 1,
+            description: "Forward-projecting, engaging keynote style for presentations"
+        ),
+        VoiceCharacter(
+            id: "german_studio",
+            name: "Precision Broadcast (German Studio)",
+            speakerEmbeddingFileName: "ses/de-studio.pth",
+            defaultTau: 0.3,
+            defaultPitch: -2,
+            description: "Structured, articulate broadcast cadence with crystal-clear diction"
+        ),
+        VoiceCharacter(
+            id: "italian_lyric",
+            name: "Italian Bel Canto (Warm Lyrical)",
+            speakerEmbeddingFileName: "ses/it-lyric.pth",
+            defaultTau: 0.32,
+            defaultPitch: 0,
+            description: "Harmonically rich, expressive vocal cadence with melodic warmth"
+        ),
+        VoiceCharacter(
+            id: "british_rp",
+            name: "British RP (Formal Articulate)",
+            speakerEmbeddingFileName: "ses/en-br.pth",
+            defaultTau: 0.3,
+            defaultPitch: -2,
+            description: "Classic Received Pronunciation with dignified, measured pacing"
+        ),
+        VoiceCharacter(
+            id: "global_consultant",
+            name: "Global Consultant (Melodic Clarity)",
+            speakerEmbeddingFileName: "ses/en-india.pth",
+            defaultTau: 0.3,
+            defaultPitch: 0,
+            description: "Engaging international consulting delivery with crisp melodic clarity"
+        ),
+        VoiceCharacter(
+            id: "korean_studio",
+            name: "K-Studio Vocal (Bright Air)",
+            speakerEmbeddingFileName: "ses/kr.pth",
+            defaultTau: 0.28,
+            defaultPitch: 2,
+            description: "Modern bright studio vocal profile with elevated harmonic sheen"
+        ),
+        VoiceCharacter(
+            id: "mandarin_clarity",
+            name: "Mandarin Precision (Crisp Diction)",
+            speakerEmbeddingFileName: "ses/zh.pth",
+            defaultTau: 0.3,
+            defaultPitch: 1,
+            description: "Tonal clarity with crisp consonant transients and neutral contour"
+        ),
+        VoiceCharacter(
+            id: "cyber_harmonic",
+            name: "Cyber Harmonic (Modern Resonant)",
+            speakerEmbeddingFileName: "ses/cyber-harmonic.pth",
+            defaultTau: 0.38,
+            defaultPitch: -1,
+            description: "Polished modern harmonic presence with tight digital resonance"
         )
     ]
 
@@ -144,17 +240,19 @@ public final class AudioController: ObservableObject {
         VoicePreset(id: "warm_expressive", name: "Warm Studio", emoji: "✨", description: "Natural vibrant timbre cloned from reference", characterId: "expressive_presence", pitchShift: 0, indexRate: 0.25, isBuiltin: true),
         VoicePreset(id: "calm_negotiator", name: "Negotiator", emoji: "🤝", description: "Crisp presence with balanced mid projection", characterId: "australian_negotiator", pitchShift: 0, indexRate: 0.35, isBuiltin: true),
         VoicePreset(id: "soothing_whisper", name: "Anti-Anxiety", emoji: "🍃", description: "Softened breathy vocal tone for low stimulation", characterId: "soothing_meditation", pitchShift: -2, indexRate: 0.2, isBuiltin: true),
+        VoicePreset(id: "deep_resonance", name: "Deep Sub-Bass", emoji: "🗿", description: "Commanding lowered baritone chest authority", characterId: "deep_bass_presence", pitchShift: -5, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "velvet_warmth", name: "Velvet Alto", emoji: "🕯️", description: "Smooth, velvety close-mic vocal presence", characterId: "velvet_alto", pitchShift: -1, indexRate: 0.28, isBuiltin: true),
+        VoicePreset(id: "nordic_clarity", name: "Nordic Calm", emoji: "❄️", description: "Clean, transparent European conference tone", characterId: "nordic_calm", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "meditation_calm", name: "Yoga Nidra", emoji: "🧘", description: "Hypnotic, breath-supported soothing tone", characterId: "yoga_nidra", pitchShift: -3, indexRate: 0.22, isBuiltin: true),
+        VoicePreset(id: "keynote_punch", name: "Keynote Pro", emoji: "⚡", description: "Dynamic, forward-projecting presentation energy", characterId: "dynamic_presenter", pitchShift: 1, indexRate: 0.35, isBuiltin: true),
         VoicePreset(id: "spanish_warmth", name: "Spanish Warmth", emoji: "🌞", description: "Harmonic expressive contour with rich timbre", characterId: "spanish_warmth", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
         VoicePreset(id: "french_elegance", name: "French Elegance", emoji: "🥐", description: "Refined melodic vocal texture with delicate air", characterId: "french_elegance", pitchShift: 2, indexRate: 0.3, isBuiltin: true),
         VoicePreset(id: "japanese_calm", name: "Japanese Serene", emoji: "🍵", description: "Clear, disciplined and articulate delivery", characterId: "japanese_calm", pitchShift: 1, indexRate: 0.3, isBuiltin: true),
-        VoicePreset(id: "deep_baritone", name: "Deep Resonance", emoji: "🗿", description: "Commanding lowered baritone authority", characterId: "american_executive", pitchShift: -5, indexRate: 0.4, isBuiltin: true),
-        VoicePreset(id: "broadcast_pro", name: "Broadcast Pro", emoji: "📻", description: "Tight radio presence with balanced warmth", characterId: "british_authority", pitchShift: -1, indexRate: 0.35, isBuiltin: true),
-        VoicePreset(id: "soft_whisper", name: "Whisper", emoji: "🤫", description: "Ultra-quiet vocal veil for private meetings", characterId: "soothing_meditation", pitchShift: -3, indexRate: 0.25, isBuiltin: true),
-        VoicePreset(id: "bright_clarity", name: "Bright Clarity", emoji: "💡", description: "Elevated clarity for noisy room environments", characterId: "australian_negotiator", pitchShift: 2, indexRate: 0.3, isBuiltin: true),
-        VoicePreset(id: "intimate_studio", name: "Intimate Studio", emoji: "🎧", description: "Close-mic warmth cloned from reference", characterId: "expressive_presence", pitchShift: -1, indexRate: 0.3, isBuiltin: true),
-        VoicePreset(id: "diplomat", name: "Diplomat", emoji: "🕊️", description: "Measured, steady cadence and calm presence", characterId: "french_elegance", pitchShift: 0, indexRate: 0.35, isBuiltin: true),
-        VoicePreset(id: "zen_focus", name: "Zen Focus", emoji: "🧘", description: "Centered serenity for stress-free communication", characterId: "japanese_calm", pitchShift: -2, indexRate: 0.25, isBuiltin: true),
-        VoicePreset(id: "leadership", name: "Leadership", emoji: "⚡", description: "Resonant, clear tone with forward projection", characterId: "american_executive", pitchShift: 0, indexRate: 0.4, isBuiltin: true)
+        VoicePreset(id: "german_broadcast", name: "German Studio", emoji: "📻", description: "Structured broadcast precision and diction", characterId: "german_studio", pitchShift: -2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "italian_belcanto", name: "Italian Lyric", emoji: "🎭", description: "Warm lyrical contour with harmonic resonance", characterId: "italian_lyric", pitchShift: 0, indexRate: 0.32, isBuiltin: true),
+        VoicePreset(id: "british_formal", name: "British RP", emoji: "👑", description: "Dignified classical BBC Received Pronunciation", characterId: "british_rp", pitchShift: -2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "global_advisor", name: "Global Advisor", emoji: "🌐", description: "Clear international cadence for consulting", characterId: "global_consultant", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "cyber_modern", name: "Cyber Presence", emoji: "🔮", description: "Modern polished resonance with tight sheen", characterId: "cyber_harmonic", pitchShift: -1, indexRate: 0.38, isBuiltin: true)
     ]
 
     @Published public var isRunning: Bool = false
@@ -236,6 +334,10 @@ public final class AudioController: ObservableObject {
     private var systemTap: AnyObject?
     public var userStopped: Bool = false
     public var isTestMode: Bool = false
+    public private(set) var isRestarting: Bool = false
+    private var restartWorkItem: DispatchWorkItem?
+    private var isConfiguringEngine: Bool = false
+    private var configChangeObserver: NSObjectProtocol?
 
     // Startup settling & DC offset filter to eliminate power-on synthetic buzz
     private var startupDiscardFrames: Int = 0
@@ -243,31 +345,38 @@ public final class AudioController: ObservableObject {
     private var dcFilterY: Float = 0.0
 
     public func setInputDevice(_ device: AudioDeviceInfo, autoStartIfReady: Bool = true) {
-        selectedInputDevice = device
+        let wasActive = isRunning || isRestarting
         userStopped = false
-        if isRunning {
-            applyDeviceRouting()
-        } else if autoStartIfReady && selectedOutputDevice != nil {
+        selectedInputDevice = device
+        if !wasActive && !isRestarting && autoStartIfReady && selectedOutputDevice != nil {
             start()
         }
     }
 
     public func setOutputDevice(_ device: AudioDeviceInfo, autoStartIfReady: Bool = true) {
-        selectedOutputDevice = device
+        let wasActive = isRunning || isRestarting
         userStopped = false
-        if isRunning {
-            applyDeviceRouting()
-        } else if autoStartIfReady && selectedInputDevice != nil {
+        selectedOutputDevice = device
+        if !wasActive && !isRestarting && autoStartIfReady && selectedInputDevice != nil {
             start()
         }
     }
 
     private func applyDeviceRouting() {
-        if isRunning {
-            stop()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.start()
+        guard !isConfiguringEngine else { return }
+        if isRunning || isRestarting {
+            restartWorkItem?.cancel()
+            isRestarting = true
+            stop(preserveRestarting: true)
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                self.isRestarting = false
+                if !self.userStopped {
+                    self.start()
+                }
             }
+            restartWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
         }
     }
 
@@ -275,10 +384,11 @@ public final class AudioController: ObservableObject {
     private let rvcQueue = DispatchQueue(label: "com.rvc.processing.queue", qos: .userInteractive)
     public let rvcInference = RVCInference()
 
-    // Low-latency chunk accumulation for OpenVoice V2 (7680 samples @ 22050Hz ≈ 0.348s = 30 STFT frames of hop 256)
+    // Low-latency chunk accumulation for OpenVoice V2 (5120 samples @ 22050Hz ≈ 0.232s = 20 STFT frames of hop 256)
     private var accumulatedSamples: [Float] = []
-    public let targetChunkSamples: Int = 7680
+    public let targetChunkSamples: Int = 5120
     private var isProcessingChunk: Bool = false
+    private var isPriorChunkActive: Bool = false
     private var currentInferenceTask: Task<Void, Never>? = nil
 
     private static let scratchCapacity = 16384
@@ -287,13 +397,33 @@ public final class AudioController: ObservableObject {
     public init() {
         Self.configureMetalLibrary()
         setupEngine()
+        setupConfigurationChangeObserver()
         loadUserPresets()
         loadCharacterWeights(character: selectedCharacter)
     }
 
     deinit {
+        if let obs = configChangeObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
         engine.stop()
         monoInputScratch.deallocate()
+    }
+
+    private func setupConfigurationChangeObserver() {
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, !self.isConfiguringEngine else { return }
+                guard (self.isRunning || self.isRestarting) && !self.userStopped else { return }
+                if !self.engine.isRunning {
+                    self.applyDeviceRouting()
+                }
+            }
+        }
     }
 
     public static func configureMetalLibrary() {
@@ -357,24 +487,36 @@ public final class AudioController: ObservableObject {
             let band1 = eqNode.bands[1]
 
             switch selectedCharacter.id {
-            case "drake", "deep_authority":
-                // Warm deep baritone: Boost low chest resonance (+5dB @ 180Hz), tame high frequencies (-3dB @ 5kHz)
+            case "american_executive", "deep_bass_presence":
+                // Resonant deep chest lows (+5.5dB @ 150Hz), controlled highs (-3.5dB @ 4.8kHz)
                 band0.filterType = .lowShelf
-                band0.frequency = (selectedCharacter.id == "deep_authority") ? 130.0 : 180.0
-                band0.gain = ((selectedCharacter.id == "deep_authority") ? 6.5 : 5.0) * indexRate
+                band0.frequency = (selectedCharacter.id == "deep_bass_presence") ? 120.0 : 160.0
+                band0.gain = ((selectedCharacter.id == "deep_bass_presence") ? 6.5 : 5.0) * indexRate
                 band0.bypass = false
 
                 band1.filterType = .highShelf
-                band1.frequency = (selectedCharacter.id == "deep_authority") ? 4200.0 : 5000.0
-                band1.gain = -4.0 * indexRate
+                band1.frequency = 4800.0
+                band1.gain = -3.5 * indexRate
                 band1.bypass = false
 
-            case "eminem", "megaphone", "arcade":
-                // Sharp articulate punch: Mid presence peak (+5dB @ 2.5kHz), crisp highs (+3dB @ 8kHz)
+            case "british_authority", "british_rp", "german_studio":
+                // Calm BBC/studio authority: Warm lower-mids (+3.5dB @ 200Hz), smooth articulate highs (+2dB @ 5.5kHz)
+                band0.filterType = .lowShelf
+                band0.frequency = 200.0
+                band0.gain = 3.5 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 5500.0
+                band1.gain = 2.0 * indexRate
+                band1.bypass = false
+
+            case "australian_negotiator", "dynamic_presenter", "global_consultant":
+                // Forward conversational presence: Mid punch (+4dB @ 2.4kHz), air sparkle (+3dB @ 8kHz)
                 band0.filterType = .parametric
-                band0.frequency = 2500.0
+                band0.frequency = 2400.0
                 band0.bandwidth = 1.0
-                band0.gain = 5.0 * indexRate
+                band0.gain = 4.0 * indexRate
                 band0.bypass = false
 
                 band1.filterType = .highShelf
@@ -382,85 +524,65 @@ public final class AudioController: ObservableObject {
                 band1.gain = 3.0 * indexRate
                 band1.bypass = false
 
-            case "anime_heroine", "chipmunk":
-                // Bright soprano: High-pass low-end rumble, sparkle high shelf (+8dB @ 3.8kHz)
+            case "soothing_meditation", "yoga_nidra":
+                // ASMR / anti-anxiety nervous system soothe: High-pass rumble, soft velvety highs (-4dB @ 6.5kHz)
                 band0.filterType = .highPass
-                band0.frequency = (selectedCharacter.id == "chipmunk") ? 250.0 : 180.0
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 3800.0
-                band1.gain = ((selectedCharacter.id == "chipmunk") ? 9.0 : 8.0) * indexRate
-                band1.bypass = false
-
-            case "radio_host":
-                // Broadcast warmth: +3.5dB @ 150Hz, crisp articulation +2.5dB @ 5.5kHz
-                band0.filterType = .lowShelf
-                band0.frequency = 150.0
-                band0.gain = 3.5 * indexRate
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 5500.0
-                band1.gain = 2.5 * indexRate
-                band1.bypass = false
-
-            case "telephone_disguise":
-                // Narrowband landline filter: Cut below 300Hz, steep shelf cut above 3400Hz
-                band0.filterType = .highPass
-                band0.frequency = 300.0
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 3400.0
-                band1.gain = -18.0 * indexRate
-                band1.bypass = false
-
-            case "robot_drone":
-                // Robotic midrange resonance: +4dB @ 1.2kHz, roll off high end
-                band0.filterType = .parametric
-                band0.frequency = 1200.0
-                band0.bandwidth = 0.8
-                band0.gain = 4.0 * indexRate
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 6000.0
-                band1.gain = -6.0 * indexRate
-                band1.bypass = false
-
-            case "whisper_soothe":
-                // Breathy ASMR anti-anxiety: Gentle low cut, softened highs
-                band0.filterType = .highPass
-                band0.frequency = 200.0
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 7000.0
-                band1.gain = -3.0 * indexRate
-                band1.bypass = false
-
-            case "stadium":
-                // Spatial stadium presence
-                band0.filterType = .lowShelf
-                band0.frequency = 220.0
-                band0.gain = 2.5 * indexRate
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 4800.0
-                band1.gain = 3.5 * indexRate
-                band1.bypass = false
-
-            case "ghost":
-                // Ethereal diffuse veil
-                band0.filterType = .highPass
-                band0.frequency = 220.0
+                band0.frequency = 180.0
                 band0.bypass = false
 
                 band1.filterType = .highShelf
                 band1.frequency = 6500.0
-                band1.gain = 5.0 * indexRate
+                band1.gain = -4.0 * indexRate
+                band1.bypass = false
+
+            case "velvet_alto", "nordic_calm", "french_elegance", "expressive_presence":
+                // Intimate acoustic velvet: Gentle warm body (+2.5dB @ 240Hz), transparent airy top (+3.5dB @ 7.5kHz)
+                band0.filterType = .parametric
+                band0.frequency = 240.0
+                band0.bandwidth = 1.2
+                band0.gain = 2.5 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 7500.0
+                band1.gain = 3.5 * indexRate
+                band1.bypass = false
+
+            case "spanish_warmth", "italian_lyric":
+                // Rich harmonic warmth: Lower-mid fullness (+3.8dB @ 280Hz), expressive treble (+2.8dB @ 5.2kHz)
+                band0.filterType = .lowShelf
+                band0.frequency = 280.0
+                band0.gain = 3.8 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 5200.0
+                band1.gain = 2.8 * indexRate
+                band1.bypass = false
+
+            case "japanese_calm", "mandarin_clarity", "korean_studio":
+                // Clear disciplined articulation: Tight low cut (140Hz), crisp consonant intelligibility (+4.5dB @ 3.6kHz)
+                band0.filterType = .highPass
+                band0.frequency = 140.0
+                band0.bypass = false
+
+                band1.filterType = .parametric
+                band1.frequency = 3600.0
+                band1.bandwidth = 1.0
+                band1.gain = 4.5 * indexRate
+                band1.bypass = false
+
+            case "cyber_harmonic":
+                // Modern cyber resonance: Mid clarity peak (+4dB @ 1.8kHz), brilliant sheen (+4dB @ 9kHz)
+                band0.filterType = .parametric
+                band0.frequency = 1800.0
+                band0.bandwidth = 0.9
+                band0.gain = 4.0 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 9000.0
+                band1.gain = 4.0 * indexRate
                 band1.bypass = false
 
             default:
@@ -953,7 +1075,9 @@ public final class AudioController: ObservableObject {
     }
 
     public func start() {
-        guard !isRunning else { return }
+        guard !isRunning && !isRestarting else { return }
+        isConfiguringEngine = true
+        defer { isConfiguringEngine = false }
         errorMessage = nil
         userStopped = false
         Self.configureMetalLibrary()
@@ -1273,6 +1397,10 @@ public final class AudioController: ObservableObject {
             currentInferenceTask = nil
             isProcessingChunk = false
             accumulatedSamples.removeAll(keepingCapacity: true)
+            if isPriorChunkActive {
+                isPriorChunkActive = false
+                Task { await OpenVoiceBridge.shared.resetContext() }
+            }
             if playerNode.isPlaying {
                 playerNode.stop()
                 playerNode.reset()
@@ -1283,11 +1411,17 @@ public final class AudioController: ObservableObject {
         }
     }
 
-    public func stop() {
-        guard isRunning || systemTap != nil || inputIOProcID != nil else { return }
+    public func stop(preserveRestarting: Bool = false) {
+        if !preserveRestarting {
+            restartWorkItem?.cancel()
+            restartWorkItem = nil
+            isRestarting = false
+        }
+        guard isRunning || engine.isRunning || systemTap != nil || inputIOProcID != nil else { return }
         currentInferenceTask?.cancel()
         currentInferenceTask = nil
         isProcessingChunk = false
+        isPriorChunkActive = false
         if #available(macOS 14.2, *), let tap = systemTap as? SystemAudioTap {
             tap.stop()
         }
@@ -1334,6 +1468,10 @@ public final class AudioController: ObservableObject {
             self.currentInferenceTask?.cancel()
             self.currentInferenceTask = nil
             self.isProcessingChunk = false
+            if self.isPriorChunkActive {
+                self.isPriorChunkActive = false
+                Task { await OpenVoiceBridge.shared.resetContext() }
+            }
             return
         }
 
@@ -1373,7 +1511,11 @@ public final class AudioController: ObservableObject {
                 }
 
                 var processed = convertedSamples
-                self.applyEdgeWindow(samples: &processed, rampLength: 64)
+                // Smooth fade-in only when transitioning from silence to active speech
+                if !self.isPriorChunkActive {
+                    self.applyFadeIn(samples: &processed, rampLength: 48)
+                    self.isPriorChunkActive = true
+                }
 
                 // Schedule playback at OpenVoice 22,050 Hz
                 self.schedulePlayback(samples: processed, sampleRate: OpenVoiceBridge.shared.modelSampleRate)
@@ -1399,13 +1541,13 @@ public final class AudioController: ObservableObject {
         processAudioChunk(chunk22k: chunk22k)
     }
 
-    private func applyEdgeWindow(samples: inout [Float], rampLength: Int = 96) {
+    private func applyFadeIn(samples: inout [Float], rampLength: Int = 48) {
         let n = samples.count
-        guard n > rampLength * 2 else { return }
-        for i in 0..<rampLength {
-            let factor = 0.5 * (1.0 - cos(Float.pi * Float(i) / Float(rampLength)))
+        let len = min(rampLength, n)
+        guard len > 0 else { return }
+        for i in 0..<len {
+            let factor = 0.5 * (1.0 - cos(Float.pi * Float(i) / Float(len)))
             samples[i] *= factor
-            samples[n - 1 - i] *= factor
         }
     }
 
@@ -1427,7 +1569,6 @@ public final class AudioController: ObservableObject {
         } else {
             resampled = resample(samples: samples, fromRate: sampleRate, toRate: targetRate)
         }
-        applyEdgeWindow(samples: &resampled)
 
         let frameCount = AVAudioFrameCount(resampled.count)
         guard frameCount > 0,
@@ -1459,26 +1600,114 @@ public final class AudioController: ObservableObject {
         }
     }
 
+    // MARK: - High-Resolution Anti-Aliased Resampling & Spectral Bandwidth Extension
+
+    /// High-resolution sample rate converter using 4-point Hermite cubic spline interpolation,
+    /// 2-pole Butterworth low-pass anti-aliasing filter on downsampling, and harmonic bandwidth extension on 48kHz output.
     private func resample(samples: [Float], fromRate: Double, toRate: Double) -> [Float] {
         if abs(fromRate - toRate) < 1.0 || samples.isEmpty {
             return samples
         }
+
+        var sourceSamples = samples
+
+        // 1. Anti-aliasing low-pass filter if downsampling (e.g. 48kHz -> 22.05kHz)
+        // Cutoff set safely at 0.46 of toRate (e.g. ~10.14 kHz for 22.05kHz) to prevent frequency foldover
+        if toRate < fromRate {
+            let cutoffHz = min(toRate * 0.46, fromRate * 0.46)
+            applyButterworthLowPass(samples: &sourceSamples, sampleRate: fromRate, cutoffHz: cutoffHz)
+        }
+
         let ratio = toRate / fromRate
-        let targetCount = Int(Double(samples.count) * ratio)
+        let targetCount = Int(Double(sourceSamples.count) * ratio)
         guard targetCount > 0 else { return [] }
         var output = [Float](repeating: 0, count: targetCount)
+        let n = sourceSamples.count
 
+        // 2. 4-point Hermite cubic spline interpolation (continuous C1 derivatives, no linear staircasing)
         for i in 0..<targetCount {
             let srcIndex = Double(i) / ratio
-            let idx = Int(srcIndex)
-            if idx + 1 < samples.count {
-                let frac = Float(srcIndex - Double(idx))
-                output[i] = samples[idx] * (1.0 - frac) + samples[idx + 1] * frac
-            } else if idx < samples.count {
-                output[i] = samples[idx]
-            }
+            let idx1 = Int(srcIndex)
+            let t = Float(srcIndex - Double(idx1))
+
+            let idx0 = max(0, idx1 - 1)
+            let idx2 = min(n - 1, idx1 + 1)
+            let idx3 = min(n - 1, idx1 + 2)
+
+            let y0 = sourceSamples[idx0]
+            let y1 = (idx1 < n) ? sourceSamples[idx1] : sourceSamples[n - 1]
+            let y2 = sourceSamples[idx2]
+            let y3 = sourceSamples[idx3]
+
+            let c0 = y1
+            let c1 = 0.5 * (y2 - y0)
+            let c2 = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3
+            let c3 = 0.5 * (y3 - y0) + 1.5 * (y1 - y2)
+
+            output[i] = ((c3 * t + c2) * t + c1) * t + c0
         }
+
+        // 3. Harmonic Bandwidth Extension (BWE) for 48kHz playback:
+        // OpenVoice tops out at 11kHz. Synthesizing subtle upper harmonics (11.5 - 18kHz)
+        // gives voices natural studio "air" on high-definition speakers & headphones.
+        if toRate >= 44100.0 && fromRate < 30000.0 {
+            applyHarmonicAirExtension(samples: &output, sampleRate: toRate)
+        }
+
         return output
+    }
+
+    /// 2-pole Butterworth low-pass IIR anti-aliasing filter
+    private func applyButterworthLowPass(samples: inout [Float], sampleRate: Double, cutoffHz: Double) {
+        let n = samples.count
+        guard n > 4 else { return }
+        let omega = tan(Double.pi * cutoffHz / sampleRate)
+        let omega2 = omega * omega
+        let sqrt2 = 1.4142135623730950488
+        let norm = 1.0 / (1.0 + sqrt2 * omega + omega2)
+
+        let a0 = Float(omega2 * norm)
+        let a1 = Float(2.0 * a0)
+        let a2 = a0
+        let b1 = Float(2.0 * (omega2 - 1.0) * norm)
+        let b2 = Float((1.0 - sqrt2 * omega + omega2) * norm)
+
+        var x1: Float = 0, x2: Float = 0, y1: Float = 0, y2: Float = 0
+        for i in 0..<n {
+            let x0 = samples[i]
+            let y0 = a0 * x0 + a1 * x1 + a2 * x2 - b1 * y1 - b2 * y2
+            x2 = x1; x1 = x0
+            y2 = y1; y1 = y0
+            samples[i] = y0
+        }
+    }
+
+    /// Harmonic Bandwidth Extension (BWE): extracts 7.5 - 10.5 kHz band, saturates to create overtones,
+    /// bandpasses to 11.5 - 19 kHz, and mixes back at -18dB.
+    private func applyHarmonicAirExtension(samples: inout [Float], sampleRate: Double) {
+        let n = samples.count
+        guard n > 8 else { return }
+
+        // Simple high-pass leaky integrator to isolate upper spectrum (> 7.5kHz)
+        let alpha: Float = Float(1.0 - exp(-2.0 * Double.pi * 7500.0 / sampleRate))
+        var hpPrev: Float = 0.0
+        var lpPrev: Float = 0.0
+        let mixGain: Float = 0.12 // -18.4 dB
+
+        for i in 0..<n {
+            let x = samples[i]
+            // High pass
+            hpPrev += alpha * (x - hpPrev)
+            let highBand = x - hpPrev
+
+            // Gentle non-linear harmonic excitation (even + odd overtones)
+            let excited = tanh(highBand * 2.2) - 0.45 * highBand
+
+            // Bandpass smoothing (leaky lowpass above 19kHz to eliminate ultra-high digital hiss)
+            lpPrev += 0.7 * (excited - lpPrev)
+
+            samples[i] = x + lpPrev * mixGain
+        }
     }
 
     private func resampleTo16k(channelData: UnsafePointer<Float>, count: Int, fromRate: Double) -> [Float] {

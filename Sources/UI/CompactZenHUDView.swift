@@ -294,6 +294,7 @@ public struct CompactZenHUDView: View {
             }
         }
         .frame(minWidth: 540, idealWidth: 560, maxWidth: 580, minHeight: 380, idealHeight: 400, maxHeight: 420)
+        .trackMouseForNeuralMesh()
     }
 
     // MARK: - Sensory Soother Components (Tab 0)

@@ -1,6 +1,7 @@
 import Foundation
 import CoreAudio
 import AVFoundation
+import Combine
 import MLX
 
 public enum TestFailure: Error, CustomStringConvertible {
@@ -48,10 +49,13 @@ public final class EndToEndTests {
             ("Test 12: No Sound Input Produces No Output (Silence & Room Noise Gate)", testNoSoundInputProducesNoOutput),
             ("Test 13: OpenVoice V2 Architecture Fidelity & Audio Transformation Integrity", testOpenVoiceV2ArchitectureFidelityAndAudioIntegrity),
             ("Test 14: Output Device Change in Non-RVC Filter Tab Does Not Activate RVC", testOutputDeviceChangeInNonRVCTabDoesNotActivateRVC),
-            ("Test 15: Tone Slider Dynamic Adjustment Under Audio Stream", testToneSliderDynamicAdjustmentUnderAudioStream)
+            ("Test 15: Tone Slider Dynamic Adjustment Under Audio Stream", testToneSliderDynamicAdjustmentUnderAudioStream),
+            ("Test 16: Teams Call Speaker Tap -> Bluetooth Headphones HFP Switch & Speaker Reselection", testTeamsCallSpeakerTapToBluetoothHeadphonesAndSpeakerReselection)
         ]
 
+        let onlyTest16 = CommandLine.arguments.contains("--test-16")
         for (name, testFunc) in tests {
+            if onlyTest16 && !name.starts(with: "Test 16:") { continue }
             print("-------------------------------------------------------")
             print("▶️ Running: \(name)...")
             do {
@@ -618,5 +622,136 @@ public final class EndToEndTests {
 
         print("   ✅ Tone slider adjusted smoothly across range with zero audio drops or socket errors.")
         controller.stop()
+    }
+
+    // MARK: - Test 16: Teams Call Speaker Tap -> Bluetooth Headphones HFP Switch & Speaker Reselection
+
+    /// Test 16: Specifically catches and verifies resolution for the user bug:
+    /// "if i start a teams call which outputs to macbook speakers and i have the app open with
+    /// macbook speakers -> bluetooth headphones it does not output anything on the headphones
+    /// often until i reselect the speaker options. Then 80% of the time it still does not work."
+    public static func testTeamsCallSpeakerTapToBluetoothHeadphonesAndSpeakerReselection() async throws {
+        let deviceManager = AudioDeviceManager()
+        let audioEngine = AppAudioEngine()
+        let rvcController = AudioController()
+        rvcController.isTestMode = true
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        guard let speakerTap = deviceManager.inputDevices.first(where: { $0.uid == "com.nsp.pseudo.speakers" }) else {
+            try testAssert(false, "MacBook Pro Speakers (Audio sent to Speakers) tap device must be available in inputDevices")
+            return
+        }
+
+        // Choose Bluetooth headphones if connected, or preferred output device
+        guard let outputDev = deviceManager.preferredOutputDevice() ?? deviceManager.outputDevices.first else {
+            print("   ⚠️ No output devices available to run Test 16")
+            return
+        }
+
+        let selectorView = DeviceSelectorView(
+            deviceManager: deviceManager,
+            audioEngine: audioEngine,
+            rvcController: rvcController,
+            selectedTab: 0
+        )
+
+        // Attach the active MainSynthView .onReceive(deviceManager.$inputDevices / $outputDevices) auto-start listeners
+        var cancellables = Set<AnyCancellable>()
+        deviceManager.$inputDevices
+            .sink { _ in
+                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    audioEngine.start()
+                }
+            }
+            .store(in: &cancellables)
+        deviceManager.$outputDevices
+            .sink { _ in
+                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    audioEngine.start()
+                }
+            }
+            .store(in: &cancellables)
+
+        // 1. Open app with MacBook Pro Speakers -> Headphones BEFORE Teams call starts
+        print("   1. Starting app with '\(speakerTap.name)' -> '\(outputDev.name)' BEFORE Teams call starts...")
+        audioEngine.setInputDevice(speakerTap)
+        audioEngine.setOutputDevice(outputDev)
+        audioEngine.start()
+        try testAssert(audioEngine.isRunning && audioEngine.isEngineActuallyRunning, "AppAudioEngine must be running before Teams call starts")
+
+        // Let engine run idle briefly before the Teams call begins
+        try? await Task.sleep(nanoseconds: 250_000_000)
+
+        // 2. Start simulated Microsoft Teams call outputting to BuiltInSpeakerDevice
+        print("   2. Starting Microsoft Teams call outputting to BuiltInSpeakerDevice & triggering Bluetooth A2DP -> HFP (1-ch) switch...")
+        let teamsCallProcess = Process()
+        teamsCallProcess.executableURL = Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+        teamsCallProcess.arguments = ["--emit-speaker-tone", "--duration", "25.0"]
+        try teamsCallProcess.run()
+        defer {
+            if teamsCallProcess.isRunning {
+                teamsCallProcess.terminate()
+            }
+            audioEngine.stop()
+            rvcController.stop()
+            cancellables.removeAll()
+        }
+
+        // Wait 600ms for Teams call audio process to spawn and establish active tone stream
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        audioEngine.simulateBluetoothHFPConfigurationChangeForTesting()
+
+        // Allow engine to recover from configuration change and measure output RMS on headphones
+        var peakAfterCallStart: Float = 0.0
+        for _ in 0..<30 {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            let rms = audioEngine.getCurrentRMS()
+            let cur = max(rms.left, rms.right)
+            if cur > peakAfterCallStart {
+                peakAfterCallStart = cur
+            }
+        }
+
+        print("   Post-Teams-call-start state: isRunning=\(audioEngine.isRunning), isEngineActuallyRunning=\(audioEngine.isEngineActuallyRunning), headphonePeakRMS=\(peakAfterCallStart)")
+        try testAssert(
+            audioEngine.isRunning && audioEngine.isEngineActuallyRunning,
+            "AppAudioEngine must automatically recover when Teams call triggers Bluetooth HFP configuration change! (isRunning=\(audioEngine.isRunning), isEngineActuallyRunning=\(audioEngine.isEngineActuallyRunning))"
+        )
+        try testAssert(
+            peakAfterCallStart > 0.05,
+            "Headphones must output audio automatically when Teams call starts without requiring manual speaker reselection! (Got peak RMS: \(peakAfterCallStart))"
+        )
+
+        // 3. Verify that reselecting the speaker option in UI during the 1-channel HFP Teams call succeeds 100% of the time (5/5 trials, zero 80% failure rate)
+        print("   3. Testing speaker option reselection 5 times during active 1-channel HFP Teams call...")
+        var successfulReselections = 0
+        let totalTrials = 5
+
+        for trial in 1...totalTrials {
+            selectorView.selectInputDevice(speakerTap)
+
+            var trialPeak: Float = 0.0
+            for _ in 0..<25 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                if audioEngine.isRunning && audioEngine.isEngineActuallyRunning {
+                    let rms = audioEngine.getCurrentRMS()
+                    let cur = max(rms.left, rms.right)
+                    if cur > trialPeak {
+                        trialPeak = cur
+                    }
+                }
+            }
+            print("      Trial \(trial)/\(totalTrials) after speaker reselection: isRunning=\(audioEngine.isRunning), engineRunning=\(audioEngine.isEngineActuallyRunning), peakRMS=\(trialPeak)")
+            if audioEngine.isRunning && audioEngine.isEngineActuallyRunning && trialPeak > 0.05 {
+                successfulReselections += 1
+            }
+        }
+
+        try testAssert(
+            successfulReselections == totalTrials,
+            "Reselecting MacBook Pro Speakers option during Teams call must work 100% of the time (\(totalTrials)/\(totalTrials)), but only \(successfulReselections)/\(totalTrials) succeeded!"
+        )
+        print("   ✅ Teams call speaker tap -> Bluetooth headphones HFP switch and \(totalTrials)/\(totalTrials) speaker reselections succeeded!")
     }
 }

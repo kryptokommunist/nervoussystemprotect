@@ -24,17 +24,25 @@ public final class OpenVoiceBridge: @unchecked Sendable {
         self.modelsDirectory = appSupport.appendingPathComponent("OpenVoiceModels")
         self.pythonExecutable = URL(fileURLWithPath: "/opt/homebrew/bin/python3.11")
 
+        let resourceDir = Bundle.main.resourceURL
+        let inBundleRunner = resourceDir?.appendingPathComponent("scripts/run_openvoice.py")
+        let inBundleDaemon = resourceDir?.appendingPathComponent("scripts/openvoice_daemon.py")
+
         let projectRoot = URL(fileURLWithPath: "/Users/I771869/Documents/Code/meetingagency")
         let scriptCandidate = projectRoot.appendingPathComponent("scripts/run_openvoice.py")
         let daemonCandidate = projectRoot.appendingPathComponent("scripts/openvoice_daemon.py")
 
-        if FileManager.default.fileExists(atPath: scriptCandidate.path) {
+        if let inBundle = inBundleRunner, FileManager.default.fileExists(atPath: inBundle.path) {
+            self.runnerScript = inBundle
+        } else if FileManager.default.fileExists(atPath: scriptCandidate.path) {
             self.runnerScript = scriptCandidate
         } else {
             self.runnerScript = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("scripts/run_openvoice.py")
         }
 
-        if FileManager.default.fileExists(atPath: daemonCandidate.path) {
+        if let inBundle = inBundleDaemon, FileManager.default.fileExists(atPath: inBundle.path) {
+            self.daemonScript = inBundle
+        } else if FileManager.default.fileExists(atPath: daemonCandidate.path) {
             self.daemonScript = daemonCandidate
         } else {
             self.daemonScript = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("scripts/openvoice_daemon.py")
@@ -57,12 +65,16 @@ public final class OpenVoiceBridge: @unchecked Sendable {
         daemonLock.lock()
         defer { daemonLock.unlock() }
 
-        // If daemon process is already running, do not re-spawn or delete socket
-        if let proc = daemonProcess, proc.isRunning {
-            return
-        }
-
         if isSocketResponsive() { return }
+
+        // If daemon process is already running, wait up to 15s for it to become responsive
+        if let proc = daemonProcess, proc.isRunning {
+            let deadline = Date().addingTimeInterval(15.0)
+            while Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.1)
+                if isSocketResponsive() { return }
+            }
+        }
 
         // Clean up stale socket file if any
         if FileManager.default.fileExists(atPath: socketPath) {
@@ -79,8 +91,8 @@ public final class OpenVoiceBridge: @unchecked Sendable {
             try proc.run()
             self.daemonProcess = proc
 
-            // Wait up to 6 seconds for daemon to load weights and listen on socket
-            let deadline = Date().addingTimeInterval(6.0)
+            // Wait up to 15 seconds for daemon to load weights, pre-warm MPS shaders, and listen on socket
+            let deadline = Date().addingTimeInterval(15.0)
             while Date() < deadline {
                 Thread.sleep(forTimeInterval: 0.1)
                 if isSocketResponsive() { break }
@@ -91,6 +103,13 @@ public final class OpenVoiceBridge: @unchecked Sendable {
     }
 
     private func isSocketResponsive() -> Bool {
+        if cachedSocketFD >= 0 {
+            var error: Int32 = 0
+            var len = socklen_t(MemoryLayout<Int32>.size)
+            if getsockopt(cachedSocketFD, SOL_SOCKET, SO_ERROR, &error, &len) == 0 && error == 0 {
+                return true
+            }
+        }
         guard let fd = connectSocket(retries: 1) else { return false }
         defer { close(fd) }
 
@@ -128,6 +147,9 @@ public final class OpenVoiceBridge: @unchecked Sendable {
             }
 
             if res == 0 {
+                var timeout = timeval(tv_sec: 2, tv_usec: 0)
+                setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
                 return fd
             } else {
                 close(fd)
@@ -139,22 +161,62 @@ public final class OpenVoiceBridge: @unchecked Sendable {
         return nil
     }
 
+    /// Retrieve or create a persistent socket file descriptor (called on socketQueue)
+    private func getPersistentSocket() -> Int32? {
+        if cachedSocketFD >= 0 {
+            var error: Int32 = 0
+            var len = socklen_t(MemoryLayout<Int32>.size)
+            if getsockopt(cachedSocketFD, SOL_SOCKET, SO_ERROR, &error, &len) == 0 && error == 0 {
+                return cachedSocketFD
+            }
+            close(cachedSocketFD)
+            cachedSocketFD = -1
+        }
+        if let fd = connectSocket() {
+            cachedSocketFD = fd
+            return fd
+        }
+        return nil
+    }
+
+    private func invalidateCachedSocket() {
+        if cachedSocketFD >= 0 {
+            close(cachedSocketFD)
+            cachedSocketFD = -1
+        }
+    }
+
+    private func readLine(from fd: Int32) -> String {
+        var line = ""
+        var charBuf: UInt8 = 0
+        while true {
+            let n = recv(fd, &charBuf, 1, 0)
+            if n <= 0 { break }
+            if charBuf == UInt8(ascii: "\n") { break }
+            line.append(Character(UnicodeScalar(charBuf)))
+        }
+        return line
+    }
+
     // MARK: - Target Speaker & Settings
 
     public func setTargetVoice(path: String) async {
         startDaemonIfNeeded()
         await withCheckedContinuation { continuation in
             socketQueue.async {
-                guard let fd = self.connectSocket() else {
+                guard let fd = self.getPersistentSocket() else {
                     continuation.resume()
                     return
                 }
-                defer { close(fd) }
 
                 let cmd = "SET_TARGET \(path)\n"
-                _ = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
-                var buffer = [CChar](repeating: 0, count: 64)
-                _ = recv(fd, &buffer, 63, 0)
+                let sent = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
+                if sent <= 0 {
+                    self.invalidateCachedSocket()
+                    continuation.resume()
+                    return
+                }
+                _ = self.readLine(from: fd)
                 continuation.resume()
             }
         }
@@ -164,16 +226,32 @@ public final class OpenVoiceBridge: @unchecked Sendable {
         startDaemonIfNeeded()
         await withCheckedContinuation { continuation in
             socketQueue.async {
-                guard let fd = self.connectSocket() else {
+                guard let fd = self.getPersistentSocket() else {
                     continuation.resume()
                     return
                 }
-                defer { close(fd) }
 
                 let cmd = "SET_TAU \(String(format: "%.3f", tau))\n"
-                _ = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
-                var buffer = [CChar](repeating: 0, count: 64)
-                _ = recv(fd, &buffer, 63, 0)
+                let sent = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
+                if sent <= 0 {
+                    self.invalidateCachedSocket()
+                    continuation.resume()
+                    return
+                }
+                _ = self.readLine(from: fd)
+                continuation.resume()
+            }
+        }
+    }
+
+    public func resetContext() async {
+        await withCheckedContinuation { continuation in
+            socketQueue.async {
+                if let fd = self.getPersistentSocket() {
+                    let cmd = "RESET_CONTEXT\n"
+                    _ = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
+                    _ = self.readLine(from: fd)
+                }
                 continuation.resume()
             }
         }
@@ -187,22 +265,34 @@ public final class OpenVoiceBridge: @unchecked Sendable {
 
         return try await withCheckedThrowingContinuation { continuation in
             socketQueue.async {
-                guard let fd = self.connectSocket() else {
+                guard let fd = self.getPersistentSocket() else {
                     continuation.resume(returning: samples)
                     return
                 }
-                defer { close(fd) }
 
                 let byteCount = samples.count * MemoryLayout<Float>.size
                 let cmd = "CONVERT_CHUNK \(byteCount) \(String(format: "%.3f", tau))\n"
 
                 // 1. Send command
-                _ = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
+                let sent = cmd.withCString { send(fd, $0, cmd.utf8.count, 0) }
+                if sent <= 0 {
+                    self.invalidateCachedSocket()
+                    continuation.resume(returning: samples)
+                    return
+                }
 
                 // 2. Send raw float bytes
+                var sendErr = false
                 samples.withUnsafeBytes { rawPtr in
                     guard let base = rawPtr.baseAddress else { return }
-                    _ = send(fd, base, byteCount, 0)
+                    if send(fd, base, byteCount, 0) <= 0 {
+                        sendErr = true
+                    }
+                }
+                if sendErr {
+                    self.invalidateCachedSocket()
+                    continuation.resume(returning: samples)
+                    return
                 }
 
                 // 3. Read response header "CHUNK <num_bytes>\n"
@@ -218,6 +308,7 @@ public final class OpenVoiceBridge: @unchecked Sendable {
                 guard headerStr.hasPrefix("CHUNK "),
                       let outBytesCount = Int(headerStr.replacingOccurrences(of: "CHUNK ", with: "").trimmingCharacters(in: .whitespacesAndNewlines)),
                       outBytesCount > 0 else {
+                    self.invalidateCachedSocket()
                     continuation.resume(returning: samples)
                     return
                 }
@@ -225,13 +316,23 @@ public final class OpenVoiceBridge: @unchecked Sendable {
                 // 4. Read raw converted audio bytes
                 var resultData = Data(count: outBytesCount)
                 var totalReceived = 0
+                var readErr = false
                 resultData.withUnsafeMutableBytes { (bufPtr: UnsafeMutableRawBufferPointer) in
                     guard let basePtr = bufPtr.baseAddress else { return }
                     while totalReceived < outBytesCount {
                         let chunk = recv(fd, basePtr.advanced(by: totalReceived), outBytesCount - totalReceived, 0)
-                        if chunk <= 0 { break }
+                        if chunk <= 0 {
+                            readErr = true
+                            break
+                        }
                         totalReceived += chunk
                     }
+                }
+
+                if readErr || totalReceived < outBytesCount {
+                    self.invalidateCachedSocket()
+                    continuation.resume(returning: samples)
+                    return
                 }
 
                 let outFloatCount = outBytesCount / MemoryLayout<Float>.size
@@ -333,6 +434,10 @@ public final class OpenVoiceBridge: @unchecked Sendable {
     public func stopDaemon() {
         daemonLock.lock()
         defer { daemonLock.unlock() }
+
+        socketQueue.sync {
+            self.invalidateCachedSocket()
+        }
 
         if let fd = connectSocket() {
             let msg = "QUIT\n"

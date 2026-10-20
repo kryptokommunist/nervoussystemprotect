@@ -44,6 +44,11 @@ if [ -f "Resources/AppLogo.png" ]; then
     cp "Resources/AppLogo.png" "${RESOURCES_DIR}/AppLogo.png"
 fi
 
+echo "==> Copying Python neural daemon scripts..."
+if [ -d "scripts" ]; then
+    cp -R "scripts" "${RESOURCES_DIR}/"
+fi
+
 echo "==> Generating Info.plist..."
 cat << 'EOF' > "${CONTENTS_DIR}/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>

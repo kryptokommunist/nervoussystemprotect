@@ -184,7 +184,7 @@ class WN(torch.nn.Module):
 
     def forward(self, x, x_mask, g=None, **kwargs):
         output = torch.zeros_like(x)
-        n_channels_tensor = torch.IntTensor([self.hidden_channels])
+        hc = self.hidden_channels
 
         if g is not None:
             g = self.cond_layer(g)
@@ -192,19 +192,19 @@ class WN(torch.nn.Module):
         for i in range(self.n_layers):
             x_in = self.in_layers[i](x)
             if g is not None:
-                cond_offset = i * 2 * self.hidden_channels
-                g_l = g[:, cond_offset : cond_offset + 2 * self.hidden_channels, :]
+                cond_offset = i * 2 * hc
+                in_act = x_in + g[:, cond_offset : cond_offset + 2 * hc, :]
             else:
-                g_l = torch.zeros_like(x_in)
+                in_act = x_in
 
-            acts = commons.fused_add_tanh_sigmoid_multiply(x_in, g_l, n_channels_tensor)
-            acts = self.drop(acts)
+            acts = torch.tanh(in_act[:, :hc, :]) * torch.sigmoid(in_act[:, hc:, :])
+            if self.training and self.p_dropout > 0:
+                acts = self.drop(acts)
 
             res_skip_acts = self.res_skip_layers[i](acts)
             if i < self.n_layers - 1:
-                res_acts = res_skip_acts[:, : self.hidden_channels, :]
-                x = (x + res_acts) * x_mask
-                output = output + res_skip_acts[:, self.hidden_channels :, :]
+                x = (x + res_skip_acts[:, :hc, :]) * x_mask
+                output = output + res_skip_acts[:, hc:, :]
             else:
                 output = output + res_skip_acts
         return output * x_mask

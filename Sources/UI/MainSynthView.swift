@@ -51,7 +51,7 @@ public struct MainSynthView: View {
                         rvcController.userStopped = true
                         rvcController.stop()
                     }
-                    if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    if !audioEngine.isRunning && !audioEngine.isRestarting && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
                         audioEngine.start()
                     }
                 } else {
@@ -59,7 +59,7 @@ public struct MainSynthView: View {
                         audioEngine.userStopped = true
                         audioEngine.stop()
                     }
-                    if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                    if !rvcController.isRunning && !rvcController.isRestarting && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
                         rvcController.start()
                     }
                 }
@@ -83,11 +83,11 @@ public struct MainSynthView: View {
                 }
             }
             if viewState.selectedTab == 0 {
-                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                if !audioEngine.isRunning && !audioEngine.isRestarting && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
                     audioEngine.start()
                 }
             } else {
-                if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                if !rvcController.isRunning && !rvcController.isRestarting && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
                     rvcController.start()
                 }
             }
@@ -105,11 +105,11 @@ public struct MainSynthView: View {
                 }
             }
             if viewState.selectedTab == 0 {
-                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                if !audioEngine.isRunning && !audioEngine.isRestarting && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
                     audioEngine.start()
                 }
             } else {
-                if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                if !rvcController.isRunning && !rvcController.isRestarting && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
                     rvcController.start()
                 }
             }
@@ -415,6 +415,7 @@ public struct MainSynthView: View {
             }
         }
         .frame(minWidth: 920, idealWidth: 960, minHeight: 700, idealHeight: 720)
+        .trackMouseForNeuralMesh()
     }
 
     private func initializeDefaults() {

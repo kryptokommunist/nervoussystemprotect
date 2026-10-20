@@ -1,9 +1,179 @@
 import SwiftUI
+import AppKit
 import simd
+
+/// Tracks normalized mouse coordinates (-1...1, -1...1) across the active UI window
+/// in both Compact Zen HUD (small) and Expanded Studio modes without intercepting hit-testing.
+public final class NeuralMouseTracker {
+    public static let shared = NeuralMouseTracker()
+
+    public struct MouseRotationState {
+        public var normX: Float       // -1.0 (left) ... +1.0 (right)
+        public var normY: Float       // -1.0 (top)  ... +1.0 (bottom)
+        public var influence: Float   // 0.0 (off UI) ... 1.0 (on UI)
+    }
+
+    private var viewSize: CGSize = .zero
+    private var targetNormX: Float = 0.0
+    private var targetNormY: Float = 0.0
+    private var isMouseOnUI: Bool = false
+    private var lastHoverActiveTime: TimeInterval = 0.0
+
+    private var smoothedNormX: Float = 0.0
+    private var smoothedNormY: Float = 0.0
+    private var smoothedInfluence: Float = 0.0
+    private var lastSampleTime: TimeInterval = 0.0
+    private var eventMonitor: Any?
+
+    private init() {
+        setupEventMonitor()
+    }
+
+    private func setupEventMonitor() {
+        eventMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .mouseEntered, .mouseExited]
+        ) { [weak self] event in
+            self?.handleAppKitEvent(event)
+            return event
+        }
+    }
+
+    private func handleAppKitEvent(_ event: NSEvent) {
+        guard let window = event.window ?? Self.findActiveUIWindow(),
+              let contentView = window.contentView else { return }
+
+        let bounds = contentView.bounds
+        guard bounds.width > 1, bounds.height > 1 else { return }
+
+        let locInWindow = window.mouseLocationOutsideOfEventStream
+        let loc = contentView.convert(locInWindow, from: nil)
+
+        if bounds.contains(loc) && event.type != .mouseExited {
+            let nx = Float((loc.x / bounds.width) * 2.0 - 1.0)
+            let ny = Float(1.0 - (loc.y / bounds.height) * 2.0)
+            targetNormX = max(-1.0, min(1.0, nx))
+            targetNormY = max(-1.0, min(1.0, ny))
+            isMouseOnUI = true
+            lastHoverActiveTime = Date().timeIntervalSinceReferenceDate
+        } else if event.type == .mouseExited {
+            isMouseOnUI = false
+        }
+    }
+
+    public func updateViewSize(_ size: CGSize) {
+        if size.width > 1 && size.height > 1 {
+            viewSize = size
+        }
+    }
+
+    public func updateHover(location: CGPoint?, isInside: Bool) {
+        if isInside, let loc = location, viewSize.width > 1, viewSize.height > 1 {
+            let nx = Float((loc.x / viewSize.width) * 2.0 - 1.0)
+            let ny = Float((loc.y / viewSize.height) * 2.0 - 1.0)
+            targetNormX = max(-1.0, min(1.0, nx))
+            targetNormY = max(-1.0, min(1.0, ny))
+            isMouseOnUI = true
+            lastHoverActiveTime = Date().timeIntervalSinceReferenceDate
+        } else if !isInside {
+            isMouseOnUI = false
+        }
+    }
+
+    private static func findActiveUIWindow() -> NSWindow? {
+        return NSApplication.shared.windows.first(where: {
+            $0.isVisible && $0.contentView != nil && $0.frame.width >= 300
+        }) ?? NSApplication.shared.keyWindow
+    }
+
+    private func pollWindowMouseLocation(now: TimeInterval) {
+        guard let window = Self.findActiveUIWindow(),
+              let contentView = window.contentView else { return }
+
+        let bounds = contentView.bounds
+        guard bounds.width > 1, bounds.height > 1 else { return }
+
+        let locInWindow = window.mouseLocationOutsideOfEventStream
+        let loc = contentView.convert(locInWindow, from: nil)
+
+        if bounds.contains(loc) {
+            let nx = Float((loc.x / bounds.width) * 2.0 - 1.0)
+            let ny = Float(1.0 - (loc.y / bounds.height) * 2.0)
+            targetNormX = max(-1.0, min(1.0, nx))
+            targetNormY = max(-1.0, min(1.0, ny))
+            isMouseOnUI = true
+            lastHoverActiveTime = now
+        } else if now - lastHoverActiveTime > 0.08 {
+            isMouseOnUI = false
+        }
+    }
+
+    public func sampleState(time: TimeInterval) -> MouseRotationState {
+        let dt: Float
+        if lastSampleTime == 0.0 {
+            dt = 1.0 / 60.0
+            lastSampleTime = time
+        } else {
+            let rawDt = time - lastSampleTime
+            if rawDt < 0.001 {
+                return MouseRotationState(
+                    normX: smoothedNormX,
+                    normY: smoothedNormY,
+                    influence: smoothedInfluence
+                )
+            }
+            dt = Float(min(0.1, max(0.001, rawDt)))
+            lastSampleTime = time
+        }
+
+        pollWindowMouseLocation(now: time)
+
+        let targetInfluence: Float = isMouseOnUI ? 1.0 : 0.0
+        let influenceRate: Float = isMouseOnUI ? 14.0 : 4.0
+        let influenceAlpha = 1.0 - exp(-influenceRate * dt)
+        smoothedInfluence += (targetInfluence - smoothedInfluence) * influenceAlpha
+
+        let posAlpha = 1.0 - exp(-18.0 * dt)
+        smoothedNormX += (targetNormX - smoothedNormX) * posAlpha
+        smoothedNormY += (targetNormY - smoothedNormY) * posAlpha
+
+        return MouseRotationState(
+            normX: smoothedNormX,
+            normY: smoothedNormY,
+            influence: smoothedInfluence
+        )
+    }
+}
+
+public extension View {
+    /// Attaches continuous mouse position tracking across a UI root view (both Compact HUD and Expanded Studio modes)
+    /// so any embedded `NeuralMeshView` maps its 3D rotation to the mouse cursor.
+    func trackMouseForNeuralMesh() -> some View {
+        self.background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear {
+                        NeuralMouseTracker.shared.updateViewSize(geo.size)
+                    }
+                    .onChange(of: geo.size) { _, newSize in
+                        NeuralMouseTracker.shared.updateViewSize(newSize)
+                    }
+            }
+        )
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let location):
+                NeuralMouseTracker.shared.updateHover(location: location, isInside: true)
+            case .ended:
+                NeuralMouseTracker.shared.updateHover(location: nil, isInside: false)
+            }
+        }
+    }
+}
 
 /// A pure SwiftUI high-performance 3D neural network particle mesh.
 /// Renders an organic, tranquil geodesic neural sphere with dynamic synaptic filaments,
-/// depth-shaded glowing nodes, independent 3D harmonic node wandering, and sound-matched acoustic pulsation.
+/// depth-shaded glowing nodes, independent 3D harmonic node wandering, sound-matched acoustic pulsation,
+/// and interactive 3D rotation mapped onto mouse movement across the UI.
 public struct NeuralMeshView: View {
     public var calmLevel: Float         // 0.0 to 1.0
     public var isVoiceActive: Bool
@@ -68,6 +238,13 @@ public struct NeuralMeshView: View {
         self.accentColor = accentColor
     }
 
+    private static func shortestAngleLerp(_ a: Float, _ b: Float, t: Float) -> Float {
+        var diff = (b - a).truncatingRemainder(dividingBy: 2.0 * .pi)
+        if diff > .pi { diff -= 2.0 * .pi }
+        if diff < -.pi { diff += 2.0 * .pi }
+        return a + diff * t
+    }
+
     public var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
             Canvas { context, size in
@@ -79,25 +256,40 @@ public struct NeuralMeshView: View {
                 let soundEnergy: Float = min(1.0, max(0.0, activityRMS * 2.2))
                 let t: Double = time
 
-                // 1. Slow, organic 3D space movement: Continuous celestial rotation & buoyant drift
-                let rotYBase: Double = t * 0.12
+                // Sample live mouse rotation state across the UI (both Compact HUD & Expanded Studio modes)
+                let mouseState = NeuralMouseTracker.shared.sampleState(time: t)
+                let inf = mouseState.influence
+
+                // 1. 3D space rotation: Mapped onto mouse position while cursor is on the UI,
+                // smoothly blending with ambient celestial drift when cursor leaves the UI.
+                let rotYBase: Double = (t * 0.12).truncatingRemainder(dividingBy: 2.0 * .pi)
                 let rotYSound: Double = Double(soundEnergy) * sin(t * 0.6) * 0.05
-                let angleY = Float(rotYBase + rotYSound)
+                let ambientAngleY = Float(rotYBase + rotYSound)
 
                 let pitch1: Double = sin(t * 0.07) * 0.26
                 let pitch2: Double = cos(t * 0.04) * 0.12
-                let angleX = Float(pitch1 + pitch2)
+                let ambientAngleX = Float(pitch1 + pitch2)
+                let ambientAngleZ = Float(cos(t * 0.05) * 0.15)
 
-                let angleZ = Float(cos(t * 0.05) * 0.15)
+                // Mouse-mapped 3D rotation angles (Yaw from X, Pitch from Y, Roll from diagonal)
+                let mouseAngleY: Float = mouseState.normX * (.pi * 0.85) + Float(rotYSound)
+                let mouseAngleX: Float = -mouseState.normY * (.pi * 0.65)
+                let mouseAngleZ: Float = (mouseState.normX * mouseState.normY * 0.40) + (mouseState.normX * 0.15)
 
-                // Buoyant zero-gravity spatial bobbing
+                let angleY = Self.shortestAngleLerp(ambientAngleY, mouseAngleY, t: inf)
+                let angleX = Self.shortestAngleLerp(ambientAngleX, mouseAngleX, t: inf)
+                let angleZ = Self.shortestAngleLerp(ambientAngleZ, mouseAngleZ, t: inf)
+
+                // Buoyant zero-gravity spatial bobbing + subtle cursor parallax
                 let bobX1: Double = sin(t * 0.22) * 3.5
                 let bobX2: Double = cos(t * 0.13) * 1.5
-                let driftX = CGFloat(bobX1 + bobX2)
+                let ambientDriftX = CGFloat(bobX1 + bobX2)
+                let ambientDriftY = CGFloat(cos(t * 0.18) * 3.0 + sin(t * 0.27) * 1.2)
 
-                let bobY1: Double = cos(t * 0.18) * 3.0
-                let bobY2: Double = sin(t * 0.27) * 1.2
-                let driftY = CGFloat(bobY1 + bobY2)
+                let mouseParallaxX = CGFloat(mouseState.normX) * 3.5
+                let mouseParallaxY = CGFloat(mouseState.normY) * 3.5
+                let driftX = ambientDriftX * CGFloat(1.0 - inf * 0.6) + mouseParallaxX * CGFloat(inf)
+                let driftY = ambientDriftY * CGFloat(1.0 - inf * 0.6) + mouseParallaxY * CGFloat(inf)
 
                 let center = CGPoint(x: w / 2 + driftX, y: h / 2 + driftY)
                 let minDim = Float(min(w, h))

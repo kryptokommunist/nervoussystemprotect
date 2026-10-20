@@ -18,7 +18,8 @@ def main():
     parser.add_argument("--reference", "-r", type=str, default=os.path.join(script_dir, "openvoice", "example_reference.mp3"), help="Target reference voice clip (3s+)")
     parser.add_argument("--output", "-o", type=str, default="/tmp/output_audio_openvoice.wav", help="Output converted audio file")
     parser.add_argument("--tau", "-t", type=float, default=0.3, help="Tone color conversion temperature (default 0.3)")
-    parser.add_argument("--device", "-d", type=str, default="cpu", help="Compute device: cpu or mps")
+    default_dev = "mps" if torch.backends.mps.is_available() else "cpu"
+    parser.add_argument("--device", "-d", type=str, default=default_dev, help=f"Compute device: cpu or mps (default: {default_dev})")
     args = parser.parse_args()
 
     models_dir = os.path.expanduser("~/Library/Application Support/OpenVoiceModels")

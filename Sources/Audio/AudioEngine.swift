@@ -42,6 +42,7 @@ public final class AppAudioEngine: ObservableObject {
     private let eqNode = AVAudioUnitEQ(numberOfBands: 2)
     private let dryMixer = AVAudioMixerNode()
     private let wetMixer = AVAudioMixerNode()
+    private let outputMixer = AVAudioMixerNode()
 
     // MARK: - Affect De-escalator (Emotional Tone Neutralizer) Parameters
     @Published public var masterDamping: Float = 0.0 {
@@ -156,6 +157,28 @@ public final class AppAudioEngine: ObservableObject {
     @Published public var errorMessage: String?
 
     private var meterTapInstalled: Bool = false
+    public private(set) var isRestarting: Bool = false
+    private var restartWorkItem: DispatchWorkItem?
+    private var isConfiguringEngine: Bool = false
+    private var configChangeObserver: NSObjectProtocol?
+    private var monitoredOutputDeviceID: AudioDeviceID = 0
+    private var outputDeviceFormatListener: AudioObjectPropertyListenerBlock?
+    private var activeOutputSampleRate: Double = 0
+    private var activeOutputChannels: AVAudioChannelCount = 0
+
+    // Test hooks for deterministic Bluetooth HFP 1-channel & configuration change verification
+    public var simulatedOutputChannelsForTesting: AVAudioChannelCount? = nil
+    public var isEngineActuallyRunning: Bool { engine.isRunning }
+
+    public func simulateBluetoothHFPConfigurationChangeForTesting() {
+        simulatedOutputChannelsForTesting = 1
+        engine.stop()
+        os_unfair_lock_lock(bufferLock)
+        rawLeftRMS = 0.0
+        rawRightRMS = 0.0
+        os_unfair_lock_unlock(bufferLock)
+        NotificationCenter.default.post(name: .AVAudioEngineConfigurationChange, object: engine)
+    }
 
     public init() {
         bufferLock.initialize(to: os_unfair_lock())
@@ -164,9 +187,14 @@ public final class AppAudioEngine: ObservableObject {
         inputScratchL.initialize(repeating: 0, count: Self.scratchCapacity)
         inputScratchR.initialize(repeating: 0, count: Self.scratchCapacity)
         setupInitialGraph()
+        setupConfigurationChangeObserver()
     }
 
     deinit {
+        if let obs = configChangeObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        removeOutputDeviceFormatListener()
         stop()
         ring.deallocate()
         inputScratchL.deallocate()
@@ -174,11 +202,86 @@ public final class AppAudioEngine: ObservableObject {
         bufferLock.deallocate()
     }
 
+    private func setupConfigurationChangeObserver() {
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            guard let self = self, !self.isConfiguringEngine else { return }
+            let handleChange = { [weak self] in
+                guard let self = self, !self.isConfiguringEngine else { return }
+                guard (self.isRunning || self.isRestarting) && !self.userStopped else { return }
+                let hwFmt = self.engine.outputNode.outputFormat(forBus: 0)
+                let curChannels = self.simulatedOutputChannelsForTesting ?? max(1, min(2, hwFmt.channelCount))
+                let curRate = hwFmt.sampleRate > 0 ? hwFmt.sampleRate : 48000.0
+                if !self.engine.isRunning || curChannels != self.activeOutputChannels || abs(curRate - self.activeOutputSampleRate) > 1.0 {
+                    self.restart()
+                }
+            }
+            if Thread.isMainThread {
+                handleChange()
+            } else {
+                DispatchQueue.main.async(execute: handleChange)
+            }
+        }
+    }
+
+    private func installOutputDeviceFormatListener(deviceID: AudioDeviceID) {
+        removeOutputDeviceFormatListener()
+        guard deviceID != 0 && deviceID != kAudioObjectUnknown else { return }
+        monitoredOutputDeviceID = deviceID
+
+        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            guard let self = self, !self.isConfiguringEngine else { return }
+            guard (self.isRunning || self.isRestarting) && !self.userStopped else { return }
+            let hwFmt = self.engine.outputNode.outputFormat(forBus: 0)
+            let curChannels = self.simulatedOutputChannelsForTesting ?? max(1, min(2, hwFmt.channelCount))
+            let curRate = hwFmt.sampleRate > 0 ? hwFmt.sampleRate : 48000.0
+            if !self.engine.isRunning || curChannels != self.activeOutputChannels || abs(curRate - self.activeOutputSampleRate) > 1.0 {
+                self.restart()
+            }
+        }
+        outputDeviceFormatListener = block
+
+        var rateAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var streamAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectAddPropertyListenerBlock(deviceID, &rateAddr, DispatchQueue.main, block)
+        AudioObjectAddPropertyListenerBlock(deviceID, &streamAddr, DispatchQueue.main, block)
+    }
+
+    private func removeOutputDeviceFormatListener() {
+        guard monitoredOutputDeviceID != 0, let block = outputDeviceFormatListener else { return }
+        var rateAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var streamAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        AudioObjectRemovePropertyListenerBlock(monitoredOutputDeviceID, &rateAddr, DispatchQueue.main, block)
+        AudioObjectRemovePropertyListenerBlock(monitoredOutputDeviceID, &streamAddr, DispatchQueue.main, block)
+        monitoredOutputDeviceID = 0
+        outputDeviceFormatListener = nil
+    }
+
     private func setupInitialGraph() {
         engine.attach(pitchNode)
         engine.attach(eqNode)
         engine.attach(dryMixer)
         engine.attach(wetMixer)
+        engine.attach(outputMixer)
 
         if eqNode.bands.count >= 2 {
             let band0 = eqNode.bands[0]
@@ -198,6 +301,7 @@ public final class AppAudioEngine: ObservableObject {
         updatePitch()
         updateEQ()
         updateMix()
+        outputMixer.outputVolume = masterVolume
         engine.mainMixerNode.outputVolume = masterVolume
     }
 
@@ -252,7 +356,7 @@ public final class AppAudioEngine: ObservableObject {
     public func setInputDevice(_ device: AudioDeviceInfo, autoStartIfReady: Bool = true) {
         selectedInputDevice = device
         userStopped = false
-        if isRunning {
+        if isRunning || isRestarting {
             restart()
         } else if autoStartIfReady && selectedOutputDevice != nil {
             start()
@@ -262,7 +366,7 @@ public final class AppAudioEngine: ObservableObject {
     public func setOutputDevice(_ device: AudioDeviceInfo, autoStartIfReady: Bool = true) {
         selectedOutputDevice = device
         userStopped = false
-        if isRunning {
+        if isRunning || isRestarting {
             restart()
         } else if autoStartIfReady && selectedInputDevice != nil {
             start()
@@ -271,7 +375,7 @@ public final class AppAudioEngine: ObservableObject {
 
     public func start() {
         userStopped = false
-        guard !isRunning else { return }
+        guard !isRunning && !isRestarting else { return }
         errorMessage = nil
 
         guard let inDev = selectedInputDevice else {
@@ -282,6 +386,9 @@ public final class AppAudioEngine: ObservableObject {
             errorMessage = "Please select an audio output destination."
             return
         }
+
+        isConfiguringEngine = true
+        defer { isConfiguringEngine = false }
 
         do {
             // 1. Playback engine -> output device
@@ -419,13 +526,18 @@ public final class AppAudioEngine: ObservableObject {
             engine.connect(pitchNode, to: eqNode, format: dspFormat)
             engine.connect(eqNode, to: wetMixer, format: dspFormat)
 
-            // Mixers -> MainMixer -> Output (re-link main mixer to the newly selected device format)
-            engine.connect(dryMixer, to: engine.mainMixerNode, format: dspFormat)
-            engine.connect(wetMixer, to: engine.mainMixerNode, format: dspFormat)
+            // Mixers -> OutputMixer -> MainMixer -> Output (re-link to the newly selected device format)
+            let outChannels = simulatedOutputChannelsForTesting ?? max(1, min(2, outHWFormat.channelCount))
+            let busFormat = AVAudioFormat(standardFormatWithSampleRate: outRate, channels: outChannels) ?? dspFormat
+            activeOutputSampleRate = outRate
+            activeOutputChannels = outChannels
+            engine.connect(dryMixer, to: outputMixer, format: dspFormat)
+            engine.connect(wetMixer, to: outputMixer, format: dspFormat)
+            engine.connect(outputMixer, to: engine.mainMixerNode, format: busFormat)
             engine.connect(engine.mainMixerNode, to: engine.outputNode, format: outHWFormat)
 
-            // 7. Install Meter Tap on Main Mixer
-            installMeterTap(format: dspFormat)
+            // 7. Install Meter Tap on Output Mixer (format: nil so both 1-ch Bluetooth HFP and 2-ch A2DP buses work)
+            installMeterTap(format: nil)
 
             // 8. Start playback first (silence until the buffer is primed), then capture
             engine.prepare()
@@ -440,6 +552,7 @@ public final class AppAudioEngine: ObservableObject {
                     print("Warning: AudioDeviceStart failed on input device: \(status)")
                 }
             }
+            installOutputDeviceFormatListener(deviceID: liveOutID)
             isRunning = true
             updateMix()
         } catch {
@@ -450,8 +563,14 @@ public final class AppAudioEngine: ObservableObject {
         }
     }
 
-    public func stop() {
+    public func stop(preserveRestarting: Bool = false) {
+        if !preserveRestarting {
+            restartWorkItem?.cancel()
+            restartWorkItem = nil
+            isRestarting = false
+        }
         guard isRunning || engine.isRunning || systemTap != nil || inputIOProcID != nil else { return }
+        removeOutputDeviceFormatListener()
         removeMeterTap()
         if #available(macOS 14.2, *), let tap = systemTap as? SystemAudioTap {
             tap.stop()
@@ -476,10 +595,18 @@ public final class AppAudioEngine: ObservableObject {
     }
 
     public func restart() {
-        stop()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            self.start()
+        restartWorkItem?.cancel()
+        isRestarting = true
+        stop(preserveRestarting: true)
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.isRestarting = false
+            if !self.userStopped {
+                self.start()
+            }
         }
+        restartWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: work)
     }
 
     // MARK: - Device helpers
@@ -801,11 +928,11 @@ public final class AppAudioEngine: ObservableObject {
         return (0, 0)
     }
 
-    private func installMeterTap(format: AVAudioFormat) {
+    private func installMeterTap(format: AVAudioFormat? = nil) {
         guard !meterTapInstalled else { return }
-        let bufferSize: AVAudioFrameCount = 1024
+        let bufferSize: AVAudioFrameCount = 512
 
-        engine.mainMixerNode.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak self] buffer, _ in
+        outputMixer.installTap(onBus: 0, bufferSize: bufferSize, format: format) { [weak self] buffer, _ in
             guard let self = self, let channelData = buffer.floatChannelData else { return }
             let frameLength = Int(buffer.frameLength)
             guard frameLength > 0 else { return }
@@ -889,7 +1016,7 @@ public final class AppAudioEngine: ObservableObject {
 
     private func removeMeterTap() {
         if meterTapInstalled {
-            engine.mainMixerNode.removeTap(onBus: 0)
+            outputMixer.removeTap(onBus: 0)
             meterTapInstalled = false
         }
     }

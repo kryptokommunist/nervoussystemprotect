@@ -9,6 +9,12 @@ struct NervousSystemProtectApp: App {
 
     init() {
         if CommandLine.arguments.contains("--emit-speaker-tone") {
+            var duration: Double = 2.0
+            if let dIdx = CommandLine.arguments.firstIndex(of: "--duration"),
+               dIdx + 1 < CommandLine.arguments.count,
+               let parsed = Double(CommandLine.arguments[dIdx + 1]) {
+                duration = parsed
+            }
             let toneEngine = AVAudioEngine()
             let toneOut = toneEngine.outputNode
             var uidAddr = AudioObjectPropertyAddress(
@@ -48,7 +54,7 @@ struct NervousSystemProtectApp: App {
             toneEngine.connect(src, to: toneEngine.mainMixerNode, format: dspFmt)
             toneEngine.connect(toneEngine.mainMixerNode, to: toneOut, format: fmt)
             try? toneEngine.start()
-            Thread.sleep(forTimeInterval: 2.0)
+            Thread.sleep(forTimeInterval: duration)
             toneEngine.stop()
             exit(0)
         }

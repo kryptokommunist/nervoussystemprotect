@@ -489,6 +489,21 @@ class SynthesizerTrn(nn.Module):
         o = self.dec((z * y_mask)[:,:,:max_len], g=g)
         return o, attn, y_mask, (z, z_p, m_p, logs_p)
 
+    def remove_weight_norm(self):
+        self.dec.remove_weight_norm()
+        if hasattr(self.enc_q, "enc") and hasattr(self.enc_q.enc, "remove_weight_norm"):
+            self.enc_q.enc.remove_weight_norm()
+        if hasattr(self.flow, "flows"):
+            for f in self.flow.flows:
+                if hasattr(f, "enc") and hasattr(f.enc, "remove_weight_norm"):
+                    f.enc.remove_weight_norm()
+        if hasattr(self, "ref_enc") and hasattr(self.ref_enc, "convs"):
+            for c in self.ref_enc.convs:
+                try:
+                    remove_weight_norm(c)
+                except Exception:
+                    pass
+
     def voice_conversion(self, y, y_lengths, sid_src, sid_tgt, tau=1.0):
         g_src = sid_src
         g_tgt = sid_tgt
