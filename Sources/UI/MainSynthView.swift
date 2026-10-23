@@ -443,6 +443,17 @@ public struct MainSynthView: View {
                 rvcController.start()
             }
         }
+
+        if CommandLine.arguments.contains("--record-frames") || CommandLine.arguments.contains("--demo-activity") {
+            audioEngine.masterDamping = 0.68
+            audioEngine.selectedAffectPreset = .calmSoothe
+            Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { _ in
+                let t = Date().timeIntervalSinceReferenceDate
+                let voiceEnvelope = max(0.0, Float(sin(t * 3.5) * 0.45 + sin(t * 7.2) * 0.22 + 0.38))
+                audioEngine.leftLevel = min(0.95, max(0.08, voiceEnvelope))
+                audioEngine.rightLevel = audioEngine.leftLevel * 0.42
+            }
+        }
     }
 }
 

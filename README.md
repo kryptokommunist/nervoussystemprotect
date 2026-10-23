@@ -10,6 +10,10 @@
 >
 > **`nervoussystemprotect`** functions as an **in-line acoustic stress firewall**. Operating directly on macOS audio streams with sub-millisecond latency, it de-escalates stressful acoustic characteristics via warm Butterworth filtering, harmonic pitch dampening, and MLX neural tone color conversion—protecting your nervous system from stress transmission without degrading speech intelligibility or meeting presence.
 
+<p align="center">
+  <img src="Resources/compact_ui_neural_mesh.gif" alt="Compact Zen HUD with 3D Animated Neural Network" width="600" />
+</p>
+
 ---
 
 A native Apple Silicon macOS application combining **real-time CoreAudio DSP pitch modulation** and **pure Swift Apple MLX Neural Voice Conversion (RVC / OpenVoice)** with zero cloud latency and zero Python, ONNX, or Core ML dependencies.

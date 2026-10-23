@@ -626,6 +626,55 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 exit(0)
             }
         }
+
+        if let idx = CommandLine.arguments.firstIndex(of: "--record-frames"), idx + 2 < CommandLine.arguments.count {
+            let outDir = CommandLine.arguments[idx + 1]
+            let frameCount = Int(CommandLine.arguments[idx + 2]) ?? 80
+            let fps: Double = (idx + 3 < CommandLine.arguments.count) ? (Double(CommandLine.arguments[idx + 3]) ?? 25.0) : 25.0
+            let interval = 1.0 / fps
+
+            try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                guard let window = NSApplication.shared.windows.first(where: { $0.isVisible }) ?? NSApplication.shared.windows.first,
+                      let contentView = window.contentView else {
+                    print("Window or contentView not found")
+                    exit(1)
+                }
+
+                var currentFrame = 0
+                let bounds = contentView.bounds
+
+                let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
+                    if currentFrame >= frameCount {
+                        timer.invalidate()
+                        print("==> Successfully recorded \(currentFrame) frames to \(outDir)")
+                        exit(0)
+                    }
+
+                    // Smooth Lissajous orbit simulating natural cursor inspection
+                    let progress = Double(currentFrame) / Double(frameCount)
+                    let angle = progress * 2.0 * .pi
+                    let normX = Float(sin(angle) * 0.72)
+                    let normY = Float(sin(angle * 2.0) * 0.42)
+                    let mouseX = (CGFloat(normX) + 1.0) * 0.5 * bounds.width
+                    let mouseY = (CGFloat(normY) + 1.0) * 0.5 * bounds.height
+
+                    NeuralMouseTracker.shared.updateHover(location: CGPoint(x: mouseX, y: mouseY), isInside: true)
+
+                    if let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) {
+                        contentView.cacheDisplay(in: bounds, to: rep)
+                        if let png = rep.representation(using: .png, properties: [:]) {
+                            let framePath = String(format: "%@/frame_%04d.png", outDir, currentFrame)
+                            try? png.write(to: URL(fileURLWithPath: framePath))
+                        }
+                    }
+
+                    currentFrame += 1
+                }
+                RunLoop.main.add(timer, forMode: .common)
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
