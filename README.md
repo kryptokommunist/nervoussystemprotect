@@ -38,16 +38,36 @@ A native Apple Silicon macOS application combining **real-time CoreAudio DSP pit
 
 ---
 
-## 🚀 How to Launch
+## 💻 System Requirements
+
+* **Architecture**: Apple Silicon Mac (M1, M2, M3, M4 or later).
+* **Operating System**: macOS 14.2 (Sonoma) or macOS 15+ (Sequoia) required for native CoreAudio process tap interception.
+* **Permissions**: Microphone & Audio Capture access (prompted on first launch).
+
+---
+
+## 🚀 Installation & Launch
+
+### Option 1: Download Release (.dmg)
+1. Download the latest `.dmg` installer from [GitHub Releases](https://github.com/kryptokommunist/nervoussystemprotect/releases).
+2. Open the disk image and drag **`nervoussystemprotect.app`** into your `/Applications` folder.
+3. On first launch, macOS Gatekeeper may prompt verification for open-source ad-hoc signed binaries. If prompted, either right-click and choose **Open**, or run:
+   ```bash
+   xattr -cr /Applications/nervoussystemprotect.app
+   ```
+
+### Option 2: Build & Package from Source
+```bash
+# Build the application bundle:
+./build_app.sh
+
+# Or package into a release DMG + ZIP:
+./package_release.sh 1.0.0
+```
 
 Launch directly from Finder or Terminal:
 ```bash
 open nervoussystemprotect.app
-```
-
-Rebuild from source anytime:
-```bash
-./build_app.sh
 ```
 
 ---

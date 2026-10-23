@@ -12,6 +12,10 @@
 *.bin
 *.tar.gz
 *.zip
+*.dmg
+*.sha256
+checksums.txt
+releases/
 .system_generated/
 tmp/
 __pycache__/
