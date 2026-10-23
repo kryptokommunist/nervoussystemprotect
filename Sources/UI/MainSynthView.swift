@@ -1,7 +1,8 @@
 import SwiftUI
 
 final class SynthViewState: ObservableObject {
-    @Published var selectedTab: Int = CommandLine.arguments.contains("--tab-rvc") ? 1 : 0
+    @Published var selectedTab: Int = (CommandLine.arguments.contains("--tab-rvc") || CommandLine.arguments.contains("--compact-neural")) ? 1 : 0
+    @Published var isExpandedToStudio: Bool = CommandLine.arguments.contains("--studio")
 }
 
 public struct MainSynthView: View {
@@ -17,6 +18,106 @@ public struct MainSynthView: View {
     }
 
     public var body: some View {
+        Group {
+            if !viewState.isExpandedToStudio && !CommandLine.arguments.contains("--studio") {
+                // CONCEPT 4: COMPACT ZEN HUD (Default Companion View)
+                CompactZenHUDView(
+                    audioEngine: audioEngine,
+                    rvcController: rvcController,
+                    deviceManager: deviceManager,
+                    selectedTab: $viewState.selectedTab,
+                    isExpandedToStudio: $viewState.isExpandedToStudio
+                )
+            } else {
+                // CONCEPT 1: EXPANDED SLEEK ZEN STUDIO VIEW
+                studioView
+            }
+        }
+        .onChange(of: viewState.isExpandedToStudio) { _, expanded in
+            DispatchQueue.main.async {
+                guard let window = NSApplication.shared.windows.first(where: { $0.isVisible }) ?? NSApplication.shared.keyWindow else { return }
+                let targetSize = expanded ? CGSize(width: 960, height: 720) : CGSize(width: 560, height: 400)
+                var frame = window.frame
+                let deltaY = frame.height - targetSize.height
+                frame.size = targetSize
+                frame.origin.y += deltaY
+                window.setFrame(frame, display: true, animate: true)
+            }
+        }
+        .onChange(of: viewState.selectedTab) { _, newTab in
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                if newTab == 0 {
+                    if rvcController.isRunning {
+                        rvcController.userStopped = true
+                        rvcController.stop()
+                    }
+                    if !audioEngine.isRunning && !audioEngine.isRestarting && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                        audioEngine.start()
+                    }
+                } else {
+                    if audioEngine.isRunning {
+                        audioEngine.userStopped = true
+                        audioEngine.stop()
+                    }
+                    if !rvcController.isRunning && !rvcController.isRestarting && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                        rvcController.start()
+                    }
+                }
+            }
+        }
+        .onAppear {
+            guard !isTestingMode else { return }
+            initializeDefaults()
+        }
+        .onReceive(deviceManager.$inputDevices) { _ in
+            guard !isTestingMode else { return }
+            if audioEngine.selectedInputDevice == nil {
+                if let dev = deviceManager.preferredInputDevice() {
+                    audioEngine.selectedInputDevice = dev
+                }
+            }
+            if rvcController.selectedInputDevice == nil {
+                let mic = deviceManager.preferredMicrophone() ?? deviceManager.getDefaultDevice(isInput: true)
+                if let mic = mic {
+                    rvcController.selectedInputDevice = mic
+                }
+            }
+            if viewState.selectedTab == 0 {
+                if !audioEngine.isRunning && !audioEngine.isRestarting && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    audioEngine.start()
+                }
+            } else {
+                if !rvcController.isRunning && !rvcController.isRestarting && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                    rvcController.start()
+                }
+            }
+        }
+        .onReceive(deviceManager.$outputDevices) { _ in
+            guard !isTestingMode else { return }
+            if audioEngine.selectedOutputDevice == nil {
+                if let defaultOut = deviceManager.preferredOutputDevice() {
+                    audioEngine.selectedOutputDevice = defaultOut
+                }
+            }
+            if rvcController.selectedOutputDevice == nil {
+                if let defaultOut = deviceManager.preferredOutputDevice() {
+                    rvcController.selectedOutputDevice = defaultOut
+                }
+            }
+            if viewState.selectedTab == 0 {
+                if !audioEngine.isRunning && !audioEngine.isRestarting && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    audioEngine.start()
+                }
+            } else {
+                if !rvcController.isRunning && !rvcController.isRestarting && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
+                    rvcController.start()
+                }
+            }
+        }
+    }
+
+    // MARK: - CONCEPT 1: FULL SLEEK ZEN STUDIO VIEW
+    private var studioView: some View {
         ZStack {
             // Elegant obsidian studio backdrop
             SynthTheme.panelBackground
@@ -59,19 +160,11 @@ public struct MainSynthView: View {
                     HStack(spacing: 4) {
                         ModeTabButton(
                             title: "Sensory Soother",
-                            icon: "waveform.path.ecg",
+                            icon: "waveform.path.badge.minus",
                             isSelected: viewState.selectedTab == 0
                         ) {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if viewState.selectedTab != 0 {
-                                    viewState.selectedTab = 0
-                                    if rvcController.isRunning {
-                                        rvcController.stop()
-                                    }
-                                    if !audioEngine.isRunning {
-                                        audioEngine.start()
-                                    }
-                                }
+                                viewState.selectedTab = 0
                             }
                         }
 
@@ -81,15 +174,7 @@ public struct MainSynthView: View {
                             isSelected: viewState.selectedTab == 1
                         ) {
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                if viewState.selectedTab != 1 {
-                                    viewState.selectedTab = 1
-                                    if audioEngine.isRunning {
-                                        audioEngine.stop()
-                                    }
-                                    if !rvcController.isRunning {
-                                        rvcController.start()
-                                    }
-                                }
+                                viewState.selectedTab = 1
                             }
                         }
                     }
@@ -98,23 +183,32 @@ public struct MainSynthView: View {
                     .cornerRadius(8)
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08), lineWidth: 1))
 
-                    // Engine Status Pill
-                    let isCurrentRunning = (viewState.selectedTab == 0) ? audioEngine.isRunning : rvcController.isRunning
-                    HStack(spacing: 5) {
-                        Circle()
-                            .fill(isCurrentRunning ? SynthTheme.ledGreen : Color.red.opacity(0.8))
-                            .frame(width: 7, height: 7)
-                            .shadow(color: isCurrentRunning ? SynthTheme.ledGreen.opacity(0.8) : Color.clear, radius: 3)
-
-                        Text(isCurrentRunning ? "ACTIVE" : "STANDBY")
-                            .font(.system(size: 9, weight: .bold, design: .default))
-                            .foregroundColor(isCurrentRunning ? SynthTheme.ledGreen : SynthTheme.textDim)
+                    // Collapse to Compact HUD Button
+                    Button(action: {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                            viewState.isExpandedToStudio = false
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.down.right.and.arrow.up.left")
+                                .font(.system(size: 8.5, weight: .bold))
+                            Text("Compact HUD")
+                                .font(.system(size: 9, weight: .bold, design: .default))
+                        }
+                        .foregroundColor(SynthTheme.ledAmber)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(SynthTheme.ledAmber.opacity(0.14))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(SynthTheme.ledAmber.opacity(0.4), lineWidth: 0.8)
+                                )
+                        )
                     }
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Color.black.opacity(0.35))
-                    .cornerRadius(6)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.white.opacity(0.06), lineWidth: 1))
+                    .buttonStyle(.plain)
+                    .help("Collapse to the minimalist floating companion HUD (Concept 4)")
                 }
                 .padding(.horizontal, 18)
                 .padding(.top, 14)
@@ -321,55 +415,7 @@ public struct MainSynthView: View {
             }
         }
         .frame(minWidth: 920, idealWidth: 960, minHeight: 700, idealHeight: 720)
-        .onAppear {
-            guard !isTestingMode else { return }
-            initializeDefaults()
-        }
-        .onReceive(deviceManager.$inputDevices) { _ in
-            guard !isTestingMode else { return }
-            if audioEngine.selectedInputDevice == nil {
-                if let dev = deviceManager.preferredInputDevice() {
-                    audioEngine.selectedInputDevice = dev
-                }
-            }
-            if rvcController.selectedInputDevice == nil {
-                let mic = deviceManager.preferredMicrophone() ?? deviceManager.getDefaultDevice(isInput: true)
-                if let mic = mic {
-                    rvcController.selectedInputDevice = mic
-                }
-            }
-            if viewState.selectedTab == 0 {
-                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
-                    audioEngine.start()
-                }
-            } else {
-                if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
-                    rvcController.start()
-                }
-            }
-        }
-        .onReceive(deviceManager.$outputDevices) { _ in
-            guard !isTestingMode else { return }
-            if audioEngine.selectedOutputDevice == nil {
-                if let defaultOut = deviceManager.preferredOutputDevice() {
-                    audioEngine.selectedOutputDevice = defaultOut
-                }
-            }
-            if rvcController.selectedOutputDevice == nil {
-                if let defaultOut = deviceManager.preferredOutputDevice() {
-                    rvcController.selectedOutputDevice = defaultOut
-                }
-            }
-            if viewState.selectedTab == 0 {
-                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
-                    audioEngine.start()
-                }
-            } else {
-                if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
-                    rvcController.start()
-                }
-            }
-        }
+        .trackMouseForNeuralMesh()
     }
 
     private func initializeDefaults() {
@@ -395,6 +441,17 @@ public struct MainSynthView: View {
         } else {
             if !rvcController.isRunning && !rvcController.userStopped && rvcController.selectedInputDevice != nil && rvcController.selectedOutputDevice != nil {
                 rvcController.start()
+            }
+        }
+
+        if CommandLine.arguments.contains("--record-frames") || CommandLine.arguments.contains("--demo-activity") {
+            audioEngine.masterDamping = 0.68
+            audioEngine.selectedAffectPreset = .calmSoothe
+            Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) { _ in
+                let t = Date().timeIntervalSinceReferenceDate
+                let voiceEnvelope = max(0.0, Float(sin(t * 3.5) * 0.45 + sin(t * 7.2) * 0.22 + 0.38))
+                audioEngine.leftLevel = min(0.95, max(0.08, voiceEnvelope))
+                audioEngine.rightLevel = audioEngine.leftLevel * 0.42
             }
         }
     }
@@ -550,8 +607,8 @@ private struct AffectNeutralizerPanel: View {
                                     .font(.system(size: 8.5, weight: audioEngine.selectedAffectPreset == preset ? .bold : .medium, design: .default))
                             }
                             .foregroundColor(audioEngine.selectedAffectPreset == preset ? Color.black : SynthTheme.textDim)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3.5)
                             .background(
                                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                                     .fill(audioEngine.selectedAffectPreset == preset ? SynthTheme.ledCyan : Color.black.opacity(0.4))
@@ -575,19 +632,13 @@ private struct AffectNeutralizerPanel: View {
                 AffectScopeView(audioEngine: audioEngine)
                     .frame(maxWidth: .infinity)
 
-                // 2. Master Affect Damping Macro Knob (Center Hero Dial)
-                VStack(spacing: 6) {
-                    KnobView(
-                        title: "Calm",
+                // 2. Master Affect Damping Macro Knob with 3D Neural Net (Center Hero Dial)
+                VStack(spacing: 4) {
+                    MasterCalmHaloKnob(
                         value: $audioEngine.masterDamping,
-                        range: 0.0...1.0,
-                        defaultValue: 0.0,
-                        unit: "%",
-                        format: "%.0f",
-                        displayMultiplier: 100.0,
-                        isBipolar: false,
-                        accentColor: SynthTheme.ledCyan,
-                        size: 56
+                        isVoiceActive: audioEngine.leftLevel > 0.05,
+                        activityRMS: audioEngine.leftLevel,
+                        size: 70
                     )
 
                     Text("MASTER CALM")

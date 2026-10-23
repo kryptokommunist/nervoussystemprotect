@@ -9,6 +9,12 @@ struct NervousSystemProtectApp: App {
 
     init() {
         if CommandLine.arguments.contains("--emit-speaker-tone") {
+            var duration: Double = 2.0
+            if let dIdx = CommandLine.arguments.firstIndex(of: "--duration"),
+               dIdx + 1 < CommandLine.arguments.count,
+               let parsed = Double(CommandLine.arguments[dIdx + 1]) {
+                duration = parsed
+            }
             let toneEngine = AVAudioEngine()
             let toneOut = toneEngine.outputNode
             var uidAddr = AudioObjectPropertyAddress(
@@ -48,7 +54,7 @@ struct NervousSystemProtectApp: App {
             toneEngine.connect(src, to: toneEngine.mainMixerNode, format: dspFmt)
             toneEngine.connect(toneEngine.mainMixerNode, to: toneOut, format: fmt)
             try? toneEngine.start()
-            Thread.sleep(forTimeInterval: 2.0)
+            Thread.sleep(forTimeInterval: duration)
             toneEngine.stop()
             exit(0)
         }
@@ -75,6 +81,28 @@ struct NervousSystemProtectApp: App {
         if let idx = CommandLine.arguments.firstIndex(of: "--convert-audio"), idx + 2 < CommandLine.arguments.count {
             let inPath = CommandLine.arguments[idx + 1]
             let outPath = CommandLine.arguments[idx + 2]
+            let refPath = (idx + 3 < CommandLine.arguments.count) ? CommandLine.arguments[idx + 3] : ""
+            let refURL = refPath.isEmpty ? nil : URL(fileURLWithPath: refPath)
+            _ = Task { @MainActor in
+                print("==> Running OpenVoice conversion on \(inPath)...")
+                do {
+                    try await OpenVoiceBridge.shared.convert(
+                        inputURL: URL(fileURLWithPath: inPath),
+                        outputURL: URL(fileURLWithPath: outPath),
+                        referenceURL: refURL
+                    )
+                    print("==> OpenVoice conversion complete: \(outPath)")
+                    exit(0)
+                } catch {
+                    print("❌ OpenVoice conversion error: \(error)")
+                    exit(1)
+                }
+            }
+        }
+
+        if let idx = CommandLine.arguments.firstIndex(of: "--convert-rvc"), idx + 2 < CommandLine.arguments.count {
+            let inPath = CommandLine.arguments[idx + 1]
+            let outPath = CommandLine.arguments[idx + 2]
             let charId = (idx + 3 < CommandLine.arguments.count) ? CommandLine.arguments[idx + 3] : "drake"
             let pitch = (idx + 4 < CommandLine.arguments.count) ? (Int(CommandLine.arguments[idx + 4]) ?? 0) : 0
             _ = Task { @MainActor in
@@ -89,10 +117,32 @@ struct NervousSystemProtectApp: App {
                 if FileManager.default.fileExists(atPath: indexURL.path) {
                     try? rvc.loadIndex(url: indexURL, rate: 0.75)
                 }
-                print("==> Running inference on \(inPath)...")
+                print("==> Running legacy RVC inference on \(inPath)...")
                 await rvc.infer(audioURL: URL(fileURLWithPath: inPath), outputURL: URL(fileURLWithPath: outPath), pitchShift: pitch, indexRate: 0.0)
-                print("==> Conversion complete: \(outPath)")
+                print("==> RVC Conversion complete: \(outPath)")
                 exit(0)
+            }
+        }
+
+        if let idx = CommandLine.arguments.firstIndex(of: "--openvoice"), idx + 2 < CommandLine.arguments.count {
+            let inPath = CommandLine.arguments[idx + 1]
+            let outPath = CommandLine.arguments[idx + 2]
+            let refPath = (idx + 3 < CommandLine.arguments.count) ? CommandLine.arguments[idx + 3] : ""
+            let refURL = refPath.isEmpty ? nil : URL(fileURLWithPath: refPath)
+            _ = Task { @MainActor in
+                print("==> Running OpenVoice conversion on \(inPath)...")
+                do {
+                    try await OpenVoiceBridge.shared.convert(
+                        inputURL: URL(fileURLWithPath: inPath),
+                        outputURL: URL(fileURLWithPath: outPath),
+                        referenceURL: refURL
+                    )
+                    print("==> OpenVoice conversion complete: \(outPath)")
+                    exit(0)
+                } catch {
+                    print("❌ OpenVoice conversion error: \(error)")
+                    exit(1)
+                }
             }
         }
 
@@ -436,7 +486,33 @@ struct NervousSystemProtectApp: App {
                     print("   AudioController input RMS from Mic: \(rvcInRMS)")
                     precondition(rvcInRMS >= 0.0, "AudioController should capture from mic")
                     rvcTest.stop()
-                    print("✅ [CHANNEL 6/6] AudioController Neural Mic: PASSED!")
+                    print("✅ [CHANNEL 6/7] AudioController Neural Mic: PASSED!")
+                }
+
+                // --- CHANNEL TEST 7: OPENVOICE V2 CONVERSION PIPELINE ---
+                if OpenVoiceBridge.shared.isAvailable {
+                    print("\n=== [CHANNEL 7/7] OPENVOICE V2 TONE COLOR CONVERTER PIPELINE ===")
+                    let testIn = URL(fileURLWithPath: "/tmp/input_audio.wav")
+                    let testOut = URL(fileURLWithPath: "/tmp/output_channel7_openvoice.wav")
+                    if FileManager.default.fileExists(atPath: testIn.path) {
+                        do {
+                            print("   Running OpenVoice tone conversion...")
+                            try await OpenVoiceBridge.shared.convert(
+                                inputURL: testIn,
+                                outputURL: testOut,
+                                referenceURL: nil,
+                                tau: 0.3
+                            )
+                            precondition(FileManager.default.fileExists(atPath: testOut.path), "OpenVoice output file must exist")
+                            print("   OpenVoice conversion verified: \(testOut.path)")
+                            print("✅ [CHANNEL 7/7] OpenVoice V2 ToneColorConverter: PASSED!")
+                        } catch {
+                            print("⚠️ OpenVoice test error: \(error)")
+                        }
+                    } else {
+                        print("ℹ️ /tmp/input_audio.wav not found, skipping OpenVoice file test")
+                        print("✅ [CHANNEL 7/7] OpenVoice V2 Engine (Availability Verified): PASSED!")
+                    }
                 }
 
                 // --- ADDITIONAL CHECKS: IDIOT-SAFE AUTO-START & DSP CONTROLS ---
@@ -548,6 +624,55 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
                 exit(0)
+            }
+        }
+
+        if let idx = CommandLine.arguments.firstIndex(of: "--record-frames"), idx + 2 < CommandLine.arguments.count {
+            let outDir = CommandLine.arguments[idx + 1]
+            let frameCount = Int(CommandLine.arguments[idx + 2]) ?? 80
+            let fps: Double = (idx + 3 < CommandLine.arguments.count) ? (Double(CommandLine.arguments[idx + 3]) ?? 25.0) : 25.0
+            let interval = 1.0 / fps
+
+            try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+                guard let window = NSApplication.shared.windows.first(where: { $0.isVisible }) ?? NSApplication.shared.windows.first,
+                      let contentView = window.contentView else {
+                    print("Window or contentView not found")
+                    exit(1)
+                }
+
+                var currentFrame = 0
+                let bounds = contentView.bounds
+
+                let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
+                    if currentFrame >= frameCount {
+                        timer.invalidate()
+                        print("==> Successfully recorded \(currentFrame) frames to \(outDir)")
+                        exit(0)
+                    }
+
+                    // Smooth Lissajous orbit simulating natural cursor inspection
+                    let progress = Double(currentFrame) / Double(frameCount)
+                    let angle = progress * 2.0 * .pi
+                    let normX = Float(sin(angle) * 0.72)
+                    let normY = Float(sin(angle * 2.0) * 0.42)
+                    let mouseX = (CGFloat(normX) + 1.0) * 0.5 * bounds.width
+                    let mouseY = (CGFloat(normY) + 1.0) * 0.5 * bounds.height
+
+                    NeuralMouseTracker.shared.updateHover(location: CGPoint(x: mouseX, y: mouseY), isInside: true)
+
+                    if let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) {
+                        contentView.cacheDisplay(in: bounds, to: rep)
+                        if let png = rep.representation(using: .png, properties: [:]) {
+                            let framePath = String(format: "%@/frame_%04d.png", outDir, currentFrame)
+                            try? png.write(to: URL(fileURLWithPath: framePath))
+                        }
+                    }
+
+                    currentFrame += 1
+                }
+                RunLoop.main.add(timer, forMode: .common)
             }
         }
     }

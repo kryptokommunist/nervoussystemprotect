@@ -122,8 +122,8 @@ public final class StartupHealthService: ObservableObject {
             StartupServiceItem(
                 id: "neural_models",
                 name: "Neural Model Weights & Assets",
-                details: "Verifies HuBERT, RMVPE, and voice character weights",
-                remedy: "Download weights in the MLX RVC tab or verify network connection.",
+                details: "Verifies OpenVoice V2 converter and voice character weights",
+                remedy: "Download weights in the Neural Voice tab or verify network connection.",
                 isFatal: false
             )
         ]
@@ -409,25 +409,27 @@ public final class StartupHealthService: ObservableObject {
         updateStatus(id: "audio_graph", status: .healthy, details: "AVAudioEngine graph initialized and compiled without fault.")
 
         // --- 7. NEURAL MODEL WEIGHTS & ASSETS ---
-        updateStatus(id: "neural_models", status: .checking, details: "Verifying neural voice assets...")
-        let requiredModels = ["hubert_base.safetensors", "rmvpe.safetensors", "drake.safetensors"]
+        updateStatus(id: "neural_models", status: .checking, details: "Verifying OpenVoice V2 assets...")
+        let openVoiceDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
+        let requiredModels = [
+            openVoiceDir.appendingPathComponent("checkpoint.pth").path,
+            openVoiceDir.appendingPathComponent("config.json").path
+        ]
         var missingFiles: [String] = []
         for file in requiredModels {
-            let existsOnDisk = FileManager.default.fileExists(atPath: "models/\(file)") ||
-                               FileManager.default.fileExists(atPath: file)
-            let existsInBundle = Bundle.main.url(forResource: file, withExtension: nil) != nil
-            if !existsOnDisk && !existsInBundle {
-                missingFiles.append(file)
+            if !FileManager.default.fileExists(atPath: file) {
+                missingFiles.append((file as NSString).lastPathComponent)
             }
         }
         if missingFiles.isEmpty {
-            updateStatus(id: "neural_models", status: .healthy, details: "All base neural weights verified on disk.")
+            updateStatus(id: "neural_models", status: .healthy, details: "OpenVoice V2 neural converter weights verified on disk.")
         } else {
             updateStatus(
                 id: "neural_models",
                 status: .warning,
                 details: "Missing weights: \(missingFiles.joined(separator: ", ")) (downloadable on demand).",
-                remedy: "Click 'RE-DOWNLOAD / VERIFY' in the MLX RVC tab to download voice models."
+                remedy: "Click 'Download Weights' in the Neural Voice tab to download voice models."
             )
         }
     }

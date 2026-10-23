@@ -44,6 +44,11 @@ if [ -f "Resources/AppLogo.png" ]; then
     cp "Resources/AppLogo.png" "${RESOURCES_DIR}/AppLogo.png"
 fi
 
+echo "==> Copying Python neural daemon scripts..."
+if [ -d "scripts" ]; then
+    cp -R "scripts" "${RESOURCES_DIR}/"
+fi
+
 echo "==> Generating Info.plist..."
 cat << 'EOF' > "${CONTENTS_DIR}/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -69,7 +74,7 @@ cat << 'EOF' > "${CONTENTS_DIR}/Info.plist"
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
+    <string>14.2</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
@@ -80,8 +85,12 @@ cat << 'EOF' > "${CONTENTS_DIR}/Info.plist"
 </plist>
 EOF
 
-echo "==> Ad-hoc code signing bundle..."
-codesign --force --deep --sign - "${BUNDLE_NAME}"
+echo "==> Ad-hoc code signing bundle with Hardened Runtime & Entitlements..."
+if [ -f "Resources/entitlements.plist" ]; then
+    codesign --force --deep --options runtime --entitlements "Resources/entitlements.plist" --sign - "${BUNDLE_NAME}"
+else
+    codesign --force --deep --sign - "${BUNDLE_NAME}"
+fi
 
 echo "==> Successfully created ${BUNDLE_NAME}!"
 echo "You can launch the app by running:"

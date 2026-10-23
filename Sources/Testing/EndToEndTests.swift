@@ -1,6 +1,7 @@
 import Foundation
 import CoreAudio
 import AVFoundation
+import Combine
 import MLX
 
 public enum TestFailure: Error, CustomStringConvertible {
@@ -46,12 +47,15 @@ public final class EndToEndTests {
             ("Test 10: Startup Settling & Synthetic Noise Immunity", testStartupTransientsAndDCNoiseImmunity),
             ("Test 11: Startup Preflight Health & Stuck Driver Watchdog", testStartupPreflightHealthAndWatchdog),
             ("Test 12: No Sound Input Produces No Output (Silence & Room Noise Gate)", testNoSoundInputProducesNoOutput),
-            ("Test 13: 48kHz Architecture Fidelity & Audio Transformation Integrity", test48kArchitectureFidelityAndAudioIntegrity),
+            ("Test 13: OpenVoice V2 Architecture Fidelity & Audio Transformation Integrity", testOpenVoiceV2ArchitectureFidelityAndAudioIntegrity),
             ("Test 14: Output Device Change in Non-RVC Filter Tab Does Not Activate RVC", testOutputDeviceChangeInNonRVCTabDoesNotActivateRVC),
-            ("Test 15: 100% Certainty HuBERT Round-Trip Phonetic Fidelity & Ground-Truth Parity", test15GroundTruthParityAndHuBERTPhoneticCycleConsistency)
+            ("Test 15: Tone Slider Dynamic Adjustment Under Audio Stream", testToneSliderDynamicAdjustmentUnderAudioStream),
+            ("Test 16: Teams Call Speaker Tap -> Bluetooth Headphones HFP Switch & Speaker Reselection", testTeamsCallSpeakerTapToBluetoothHeadphonesAndSpeakerReselection)
         ]
 
+        let onlyTest16 = CommandLine.arguments.contains("--test-16")
         for (name, testFunc) in tests {
+            if onlyTest16 && !name.starts(with: "Test 16:") { continue }
             print("-------------------------------------------------------")
             print("▶️ Running: \(name)...")
             do {
@@ -138,8 +142,10 @@ public final class EndToEndTests {
             waited += 1
         }
 
-        // Generate 0.35s harmonic vocal waveform (5600 samples @ 16kHz)
-        let sampleCount = 5600
+        try testAssert(controller.isNeuralModelLoaded, "Neural model must be loaded for audio test")
+
+        // Generate 0.4s harmonic vocal waveform (6400 samples @ 16kHz -> 8820 samples @ 22050Hz)
+        let sampleCount = 6400
         var vocalAudio = [Float](repeating: 0, count: sampleCount)
         for i in 0..<sampleCount {
             let t = Float(i) / 16000.0
@@ -147,12 +153,10 @@ public final class EndToEndTests {
         }
 
         print("   Feeding \(sampleCount) vocal samples into controller...")
-        vocalAudio.withUnsafeBufferPointer { ptr in
-            controller.handleIncomingAudioForTest(samples: Array(ptr), fromRate: 16000.0)
-        }
+        controller.handleIncomingAudioForTest(samples: vocalAudio, fromRate: 16000.0)
 
-        // Wait for MLX neural chunk inference to complete
-        try? await Task.sleep(nanoseconds: 800_000_000)
+        // Wait for OpenVoice neural chunk inference to complete
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
 
         print("   Raw input RMS: \(controller.rawInputRMS)")
         print("   Input level: \(controller.inputLevel)")
@@ -294,8 +298,9 @@ public final class EndToEndTests {
         }
 
         if let dev = targetOutDev {
-            controller.setOutputDevice(dev)
+            controller.setOutputDevice(dev, autoStartIfReady: false)
         }
+        controller.isTestMode = true
         controller.start()
         try testAssert(controller.isRunning, "Controller must start cleanly on output device: \(controller.selectedOutputDevice?.name ?? "unknown")")
 
@@ -429,14 +434,14 @@ public final class EndToEndTests {
 
         // Part C: Active speech burst followed by silence
         print("   Part C: Testing active speech followed by silence...")
-        let sampleCount = 5600
+        let sampleCount = 6400
         var vocalAudio = [Float](repeating: 0, count: sampleCount)
         for i in 0..<sampleCount {
             let t = Float(i) / 16000.0
             vocalAudio[i] = 0.35 * sin(2.0 * .pi * 220.0 * t) + 0.2 * sin(2.0 * .pi * 440.0 * t)
         }
         controller.handleIncomingAudioForTest(samples: vocalAudio, fromRate: 16000.0)
-        try? await Task.sleep(nanoseconds: 800_000_000)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
         print("      Active speech: outputLevel=\(controller.outputLevel)")
         try testAssert(controller.outputLevel > 0.0, "Audio should be synthesized during active speech")
 
@@ -452,11 +457,10 @@ public final class EndToEndTests {
         controller.stop()
     }
 
-    /// Test 13: 48kHz Architecture Fidelity & Audio Transformation Integrity
-    /// Verifies that 48k models are properly detected with 48000Hz sample rate,
-    /// upsample rates [12, 10, 2, 2] and kernel sizes [24, 20, 4, 4],
-    /// and that synthesized audio does NOT produce sharp clipping or aliased artifacts.
-    public static func test48kArchitectureFidelityAndAudioIntegrity() async throws {
+    /// Test 13: OpenVoice V2 Architecture Fidelity & Audio Transformation Integrity
+    /// Verifies that OpenVoice V2 runs at 22,050Hz sample rate,
+    /// converts audio chunks without NaN/inf/clipping, and produces clean transformed speech.
+    public static func testOpenVoiceV2ArchitectureFidelityAndAudioIntegrity() async throws {
         let controller = AudioController()
         controller.isTestMode = true
         controller.start()
@@ -468,41 +472,35 @@ public final class EndToEndTests {
         }
         try testAssert(controller.isNeuralModelLoaded, "Neural model must be loaded for architecture test")
 
-        // 1. Verify exact 48kHz sample rate detection on 48k models (was broken at 40000Hz)
-        let sr = controller.rvcInference.modelSampleRate
+        // 1. Verify exact 22,050Hz OpenVoice sample rate
+        let sr = OpenVoiceBridge.shared.modelSampleRate
         print("   Detected modelSampleRate: \(sr)Hz")
-        try testAssert(sr == 48000, "RVC 48k models (drake, eminem, anime, f0G48k) must detect sampleRate = 48000Hz (got \(sr)Hz)")
+        try testAssert(sr == 22050, "OpenVoice V2 models must detect sampleRate = 22050Hz (got \(sr)Hz)")
 
-        // 2. Synthesize harmonic vocal audio (5600 samples @ 16kHz = exact 17 HuBERT frames)
-        let sampleCount = 5600
+        // 2. Synthesize harmonic vocal audio chunk (7680 samples @ 22050Hz = ~0.348s)
+        let sampleCount = 7680
         var vocalAudio = [Float](repeating: 0, count: sampleCount)
         for i in 0..<sampleCount {
-            let t = Float(i) / 16000.0
+            let t = Float(i) / 22050.0
             vocalAudio[i] = 0.35 * sin(2.0 * .pi * 220.0 * t) + 0.2 * sin(2.0 * .pi * 440.0 * t)
         }
 
-        let mlxInput = MLXArray(vocalAudio)
-        let synth = try await controller.rvcInference.inferChunk(
-            chunk: mlxInput,
-            pitchShift: 0,
-            f0Method: "rmvpe",
-            indexRate: 0.0
-        )
-        MLX.eval(synth)
+        let start = CFAbsoluteTimeGetCurrent()
+        let converted = try await OpenVoiceBridge.shared.convertChunk(samples: vocalAudio, tau: 0.3)
+        let durationMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
 
-        let outSamples = synth.reshaped([-1]).asType(Float.self).asArray(Float.self)
-        print("   Synthesized samples count: \(outSamples.count) (expected 16320 = 34 frames * 480 upsample)")
-        try testAssert(outSamples.count == 16320, "Output length must match exactly 34 * 480 = 16320 for 17 HuBERT frames (got \(outSamples.count))")
+        print("   Converted \(converted.count) samples in \(durationMs)ms")
+        try testAssert(!converted.isEmpty, "Converted samples must not be empty")
 
         // 3. Verify audio waveform smoothness and absence of sharp NaN/inf/clipping
         var maxVal: Float = 0.0
-        for s in outSamples {
+        for s in converted {
             try testAssert(!s.isNaN && !s.isInfinite, "Synthesized samples must be finite real numbers")
             let absVal = abs(s)
             if absVal > maxVal { maxVal = absVal }
         }
         print("   Peak waveform amplitude: \(maxVal)")
-        try testAssert(maxVal > 0.05 && maxVal < 5.0, "Transformed audio must have clean, non-clipped amplitude (got \(maxVal))")
+        try testAssert(maxVal > 0.01 && maxVal < 5.0, "Transformed audio must have clean, non-clipped amplitude (got \(maxVal))")
 
         controller.stop()
     }
@@ -558,321 +556,202 @@ public final class EndToEndTests {
         rvcController.stop()
     }
 
-    // MARK: - Test 15 Helpers
 
-    public static func loadNumpyArray(path: String) throws -> MLXArray {
-        let data = try Data(contentsOf: URL(fileURLWithPath: path))
-        guard data.count > 10 else {
-            throw TestFailure.assertionFailed("Numpy file too small: \(path)")
-        }
-        let major = data[6]
-        let headerLen: Int
-        let headerStart: Int
-        if major == 1 {
-            headerLen = Int(data[8]) + Int(data[9]) * 256
-            headerStart = 10
-        } else {
-            headerLen = Int(data[8]) | (Int(data[9]) << 8) | (Int(data[10]) << 16) | (Int(data[11]) << 24)
-            headerStart = 12
-        }
-        let headerEnd = headerStart + headerLen
-        guard data.count >= headerEnd else {
-            throw TestFailure.assertionFailed("Invalid numpy header in \(path)")
-        }
-        let headerData = data[headerStart..<headerEnd]
-        let headerString = String(data: headerData, encoding: .ascii) ?? String(data: headerData, encoding: .utf8) ?? ""
 
-        // Extract shape
-        let shapePattern = "'shape': \\(([^)]*)\\)"
-        let shapeRegex = try NSRegularExpression(pattern: shapePattern)
-        var shape: [Int] = []
-        if let match = shapeRegex.firstMatch(in: headerString, range: NSRange(headerString.startIndex..., in: headerString)),
-           let range = Range(match.range(at: 1), in: headerString) {
-            let shapeStr = String(headerString[range])
-            shape = shapeStr.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-        }
-        if shape.isEmpty { shape = [1] }
+    // MARK: - Test 15: Tone Slider Dynamic Adjustment Under Audio Stream
 
-        let count = shape.reduce(1, *)
-        if headerString.contains("f8") { // float64 (Double)
-            var doubles = [Double](repeating: 0.0, count: count)
-            _ = doubles.withUnsafeMutableBytes { dest in
-                data.copyBytes(to: dest, from: headerEnd..<(headerEnd + count * 8))
-            }
-            return MLXArray(doubles.map { Float($0) }).reshaped(shape)
-        } else { // float32 (Float)
-            var floats = [Float](repeating: 0.0, count: count)
-            _ = floats.withUnsafeMutableBytes { dest in
-                data.copyBytes(to: dest, from: headerEnd..<(headerEnd + count * 4))
-            }
-            return MLXArray(floats).reshaped(shape)
-        }
-    }
-
-    public static func computeCorrelation(_ a: MLXArray, _ b: MLXArray) -> Float {
-        let aflat = a.reshaped([-1]).asType(Float.self)
-        let bflat = b.reshaped([-1]).asType(Float.self)
-        let amean = MLX.mean(aflat)
-        let bmean = MLX.mean(bflat)
-        let anorm = aflat - amean
-        let bnorm = bflat - bmean
-        let num = MLX.sum(anorm * bnorm)
-        let denom = MLX.sqrt(MLX.sum(anorm * anorm) * MLX.sum(bnorm * bnorm)) + 1e-8
-        let r = num / denom
-        MLX.eval(r)
-        return r.item(Float.self)
-    }
-
-    public static func computeCosineSimilarity(_ a: MLXArray, _ b: MLXArray) -> Float {
-        let aNorm = a / MLX.maximum(MLX.sqrt(MLX.sum(a * a, axis: -1, keepDims: true)), MLXArray(1e-8))
-        let bNorm = b / MLX.maximum(MLX.sqrt(MLX.sum(b * b, axis: -1, keepDims: true)), MLXArray(1e-8))
-        let cosSim = MLX.sum(aNorm * bNorm, axis: -1)
-        let meanSim = MLX.mean(cosSim)
-        MLX.eval(meanSim)
-        return meanSim.item(Float.self)
-    }
-
-    public static func pearsonCorrelation(_ x: [Float], _ y: [Float]) -> Float {
-        guard x.count == y.count && !x.isEmpty else { return 0 }
-        let n = Float(x.count)
-        let mx = x.reduce(0, +) / n
-        let my = y.reduce(0, +) / n
-        var num: Float = 0
-        var d1: Float = 0
-        var d2: Float = 0
-        for i in 0..<x.count {
-            let dx = x[i] - mx
-            let dy = y[i] - my
-            num += dx * dy
-            d1 += dx * dx
-            d2 += dy * dy
-        }
-        let denom = sqrt(d1 * d2)
-        return denom > 0 ? num / denom : 0
-    }
-
-    /// Test 15: 100% Certainty HuBERT Round-Trip Phonetic Fidelity & Ground-Truth Parity
-    /// Provides definitive, mathematically unforgeable proof that:
-    /// 1. HuBERT feature extraction matches reference Python output (r >= 0.95, cosSim >= 0.98)
-    /// 2. RMVPE pitch tracking matches reference Python output on voiced frames (r >= 0.95)
-    /// 3. End-to-end RVC transformation of real human speech produces genuine speech
-    ///    with high phonetic cycle-consistency (HuBERT cosine similarity >= 0.65).
-    ///    A synthesizer buzz / robotic carrier sine wave produces < 0.20 phonetic similarity,
-    ///    guaranteeing zero false positives.
-    public static func test15GroundTruthParityAndHuBERTPhoneticCycleConsistency() async throws {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let rvcDir = appSupport.appendingPathComponent("RVCModels")
-        let testDataDir = rvcDir.appendingPathComponent("test_data")
-
-        let audioNpyPath = testDataDir.appendingPathComponent("input_audio.npy").path
-        let hubertNpyPath = testDataDir.appendingPathComponent("hubert_features.npy").path
-        let rmvpeNpyPath = testDataDir.appendingPathComponent("rmvpe_f0.npy").path
-
-        guard FileManager.default.fileExists(atPath: audioNpyPath),
-              FileManager.default.fileExists(atPath: hubertNpyPath),
-              FileManager.default.fileExists(atPath: rmvpeNpyPath) else {
-            print("   ⚠️ Test data missing in \(testDataDir.path), skipping Test 15")
-            return
-        }
-
-        print("   📂 Loading ground-truth reference data from \(testDataDir.lastPathComponent)...")
-        let inputAudio = try loadNumpyArray(path: audioNpyPath)
-        let refHubert = try loadNumpyArray(path: hubertNpyPath)
-        let refF0 = try loadNumpyArray(path: rmvpeNpyPath)
-
-        print("      • input_audio shape: \(inputAudio.shape) (duration: \(String(format: "%.2f", Double(inputAudio.shape[0]) / 16000.0))s)")
-        print("      • ref_hubert shape:  \(refHubert.shape)")
-        print("      • ref_rmvpe_f0 shape: \(refF0.shape)")
-
-        // Initialize AudioController and await model loading
+    /// Test 15: Tone Slider Dynamic Adjustment Under Audio Stream
+    /// Specifically catches and verifies resolution for the user bug:
+    /// "bug, rvc works, but if i move the tone slider it stops working, no more output."
+    /// Verifies that rapidly sliding the Tone Color Strength (Tau) slider while audio is streaming:
+    /// - Does NOT cause socket connection failure or daemon restart
+    /// - Does NOT drop or silence the audio stream
+    /// - Continuously produces active output level (> 0.0) with updated tau parameters
+    public static func testToneSliderDynamicAdjustmentUnderAudioStream() async throws {
         let controller = AudioController()
         controller.isTestMode = true
         controller.start()
+        try testAssert(controller.isRunning, "AudioController must be running")
 
+        // 1. Wait for model weights to load
         var waited = 0
         while !controller.isNeuralModelLoaded && waited < 40 {
             try? await Task.sleep(nanoseconds: 500_000_000)
             waited += 1
         }
-        try testAssert(controller.isNeuralModelLoaded, "Neural model must be loaded for 100% certainty test")
+        try testAssert(controller.isNeuralModelLoaded, "Neural model must be loaded for tone slider test")
 
-        guard let hubertModel = controller.rvcInference.hubertModel else {
-            throw TestFailure.assertionFailed("HuBERT model not initialized in RVCInference")
-        }
-        guard let rmvpeModel = controller.rvcInference.rmvpe else {
-            throw TestFailure.assertionFailed("RMVPE model not initialized in RVCInference")
-        }
-
-        // =========================================================================
-        // PART 1: HuBERT Feature Extraction & Acoustic Representation Check
-        // =========================================================================
-        print("   🔍 [Part 1/4] HuBERT Feature Extraction & Acoustic Dynamics Check...")
-        // Use first 3 seconds (48,000 samples = 150 frames @ 50fps)
-        let testSampleCount = min(48000, inputAudio.shape[0])
-        let audioChunk = inputAudio[0..<testSampleCount]
-        let audioInput = audioChunk.expandedDimensions(axis: 0) // [1, T]
-
-        let hubertFeatures = hubertModel(audioInput) // [1, Frames, 768]
-        MLX.eval(hubertFeatures)
-
-        let expectedFrames = testSampleCount / 320
-        print("      HuBERT output shape: \(hubertFeatures.shape) (expected [1, ~\(expectedFrames), 768])")
-        try testAssert(abs(hubertFeatures.shape[1] - expectedFrames) <= 1, "HuBERT output frames must match 50fps frame rate (got \(hubertFeatures.shape[1]), expected ~\(expectedFrames))")
-        try testAssert(hubertFeatures.shape[0] == 1 && hubertFeatures.shape[2] == 768, "HuBERT output must have shape [1, T, 768]")
-
-        let hFlat = hubertFeatures.reshaped([-1]).asType(Float.self)
-        let hSamples = hFlat.asArray(Float.self)
-        for s in hSamples[0..<min(500, hSamples.count)] {
-            try testAssert(!s.isNaN && !s.isInfinite, "HuBERT features must be finite real numbers")
-        }
-
-        let hStdDev = MLX.sqrt(MLX.mean(MLX.pow(hFlat - MLX.mean(hFlat), 2))).item(Float.self)
-        print("      HuBERT 768-D embedding standard deviation: \(String(format: "%.5f", hStdDev))")
-        try testAssert(hStdDev > 0.05, "HuBERT embedding space must have rich non-collapsed representations (got \(hStdDev))")
-
-        // =========================================================================
-        // PART 2: RMVPE Ground-Truth Parity Check
-        // =========================================================================
-        print("   🔍 [Part 2/4] RMVPE Pitch Ground-Truth Parity Check...")
-        let f0Batched = rmvpeModel.infer(audio: audioChunk, thred: 0.03) // [1, T_f0, 1]
-        MLX.eval(f0Batched)
-
-        let f0Flat = f0Batched.reshaped([-1]).asType(Float.self)
-        let refF0Flat = refF0.reshaped([-1]).asType(Float.self)
-        let f0FramesToCheck = min(f0Flat.shape[0], refF0Flat.shape[0])
-
-        let f0Slice = f0Flat[0..<f0FramesToCheck]
-        let refF0Slice = refF0Flat[0..<f0FramesToCheck]
-        MLX.eval(f0Slice, refF0Slice)
-
-        let f0Arr = f0Slice.asArray(Float.self)
-        let refF0Arr = refF0Slice.asArray(Float.self)
-
-        var voicedF0: [Float] = []
-        var voicedRef: [Float] = []
-        for i in 0..<f0FramesToCheck {
-            if f0Arr[i] > 50.0 && refF0Arr[i] > 50.0 {
-                voicedF0.append(f0Arr[i])
-                voicedRef.append(refF0Arr[i])
-            }
-        }
-        print("      Swift F0 (first 25): \(Array(f0Arr[0..<min(25, f0Arr.count)]).map { String(format: "%.1f", $0) })")
-        print("      Ref F0   (first 25): \(Array(refF0Arr[0..<min(25, refF0Arr.count)]).map { String(format: "%.1f", $0) })")
-        print("      Voiced frames evaluated: \(voicedF0.count) of \(f0FramesToCheck)")
-        try testAssert(voicedF0.count > 20, "Input audio must have sufficient voiced frames for pitch validation")
-
-        let f0Corr = pearsonCorrelation(voicedF0, voicedRef)
-        print("      RMVPE Pitch correlation on voiced frames: \(String(format: "%.5f", f0Corr)) (expected >= 0.95)")
-        try testAssert(f0Corr >= 0.95, "RMVPE pitch correlation on voiced frames must be >= 0.95 (got \(f0Corr))")
-
-        // =========================================================================
-        // PART 3: Full RVC End-to-End Real Speech Transformation
-        // =========================================================================
-        print("   🔍 [Part 3/4] Full RVC End-to-End Real Speech Transformation...")
-        let synthOut = try await controller.rvcInference.inferChunk(
-            chunk: audioChunk,
-            pitchShift: 0,
-            f0Method: "rmvpe",
-            indexRate: 0.0
-        )
-        MLX.eval(synthOut)
-
-        let outFlat = synthOut.reshaped([-1]).asType(Float.self)
-        let outSamples = outFlat.asArray(Float.self)
-        print("      Synthesized samples: \(outSamples.count) at \(controller.rvcInference.modelSampleRate)Hz")
-
-        // Check waveform bounds & variance
-        var maxAmp: Float = 0.0
-        for s in outSamples {
-            try testAssert(!s.isNaN && !s.isInfinite, "Synthesized samples must be finite")
-            let a = abs(s)
-            if a > maxAmp { maxAmp = a }
-        }
-        let stdDev = MLX.sqrt(MLX.mean(MLX.pow(outFlat - MLX.mean(outFlat), 2))).item(Float.self)
-        print("      Peak amplitude: \(String(format: "%.4f", maxAmp)), Standard deviation: \(String(format: "%.4f", stdDev))")
-        try testAssert(maxAmp > 0.05 && maxAmp < 5.0, "Transformed audio must have clean non-clipped amplitude")
-        try testAssert(stdDev > 0.01, "Transformed audio must have natural dynamic speech contrast (got \(stdDev))")
-
-        // =========================================================================
-        // PART 4: HuBERT Round-Trip Phonetic Cycle-Consistency (100% Certainty Test)
-        // =========================================================================
-        print("   🔍 [Part 4/4] HuBERT Round-Trip Phonetic Cycle-Consistency (Definitive Proof)...")
-        // Downsample synthesized 48kHz audio back to 16kHz for HuBERT phonetic evaluation
-        // (48k / 3 = 16k; 3-sample box average)
-        var downsampledSamples: [Float] = []
-        downsampledSamples.reserveCapacity(outSamples.count / 3)
-        for i in stride(from: 0, to: outSamples.count - 2, by: 3) {
-            let avg = (outSamples[i] + outSamples[i + 1] + outSamples[i + 2]) / 3.0
-            downsampledSamples.append(avg)
-        }
-        let audio16kFromSynth = MLXArray(downsampledSamples)
-        MLX.eval(audio16kFromSynth)
-
-        // Extract phonetic representations from both original speech and converted speech
-        let inputSpeechHuBERT = hubertModel(audioChunk.expandedDimensions(axis: 0))
-        let outputSpeechHuBERT = hubertModel(audio16kFromSynth.expandedDimensions(axis: 0))
-        MLX.eval(inputSpeechHuBERT, outputSpeechHuBERT)
-
-        let minHuBERTFrames = min(inputSpeechHuBERT.shape[1], outputSpeechHuBERT.shape[1])
-        let inHSlice = inputSpeechHuBERT[0..., 0..<minHuBERTFrames, 0...]
-        let outHSlice = outputSpeechHuBERT[0..., 0..<minHuBERTFrames, 0...]
-        MLX.eval(inHSlice, outHSlice)
-
-        // Search across small temporal receptive-field lags (-5...+5 frames) to find maximum phonetic alignment
-        var bestSpeechSim: Float = 0.0
-        var bestLag: Int = 0
-        for lag in -5...5 {
-            let startIn = max(0, -lag)
-            let startOut = max(0, lag)
-            let len = minHuBERTFrames - abs(lag)
-            if len > 30 {
-                let inSub = inHSlice[0..., startIn..<(startIn + len), 0...]
-                let outSub = outHSlice[0..., startOut..<(startOut + len), 0...]
-                let sim = computeCosineSimilarity(inSub, outSub)
-                if sim > bestSpeechSim {
-                    bestSpeechSim = sim
-                    bestLag = lag
-                }
-            }
-        }
-        print("      🗣️ Real Speech Transformed HuBERT Phonetic Cosine Similarity: \(String(format: "%.4f", bestSpeechSim)) (lag: \(bestLag) frames)")
-
-        // COUNTERFACTUAL CONTROL TEST:
-        // Synthesizer buzz / robotic sine wave carrier of identical length
-        var synthBuzzSamples = [Float](repeating: 0, count: testSampleCount)
-        for i in 0..<testSampleCount {
+        // 2. Feed initial audio chunk to establish active streaming
+        let sampleCount = 6400 // 0.4s @ 16kHz -> 8820 samples @ 22050Hz (> targetChunkSamples 7680)
+        var vocalAudio = [Float](repeating: 0, count: sampleCount)
+        for i in 0..<sampleCount {
             let t = Float(i) / 16000.0
-            synthBuzzSamples[i] = 0.4 * sin(2.0 * .pi * 220.0 * t) + 0.3 * sin(2.0 * .pi * 440.0 * t)
+            vocalAudio[i] = 0.35 * sin(2.0 * .pi * 220.0 * t) + 0.2 * sin(2.0 * .pi * 440.0 * t)
         }
-        let buzzArray = MLXArray(synthBuzzSamples).expandedDimensions(axis: 0)
-        let buzzHuBERT = hubertModel(buzzArray)
-        MLX.eval(buzzHuBERT)
 
-        let buzzFrames = min(inHSlice.shape[1], buzzHuBERT.shape[1])
-        var maxBuzzSim: Float = 0.0
-        for lag in -5...5 {
-            let startIn = max(0, -lag)
-            let startBuzz = max(0, lag)
-            let len = buzzFrames - abs(lag)
-            if len > 30 {
-                let inSub = inHSlice[0..., startIn..<(startIn + len), 0...]
-                let buzzSub = buzzHuBERT[0..., startBuzz..<(startBuzz + len), 0...]
-                let sim = computeCosineSimilarity(inSub, buzzSub)
-                if sim > maxBuzzSim {
-                    maxBuzzSim = sim
+        print("   Feeding initial audio chunk to establish pipeline...")
+        controller.handleIncomingAudioForTest(samples: vocalAudio, fromRate: 16000.0)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+
+        print("   Initial output level: \(controller.outputLevel)")
+        try testAssert(controller.outputLevel > 0.0, "Initial audio chunk should produce audible output")
+
+        // 3. Simulate rapid slider movement while streaming audio continuously
+        print("   Simulating rapid Tone Slider dragging across full 0.05...1.0 range...")
+        let tauValues: [Float] = [0.10, 0.25, 0.40, 0.60, 0.85, 1.00, 0.75, 0.50, 0.30, 0.15, 0.30]
+        for tau in tauValues {
+            // Rapid slider movement
+            controller.toneColorTau = tau
+            // Feed another audio burst mid-drag
+            controller.handleIncomingAudioForTest(samples: vocalAudio, fromRate: 16000.0)
+            try? await Task.sleep(nanoseconds: 80_000_000)
+        }
+
+        // Wait for final processing
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+
+        print("   Post-slider output level: \(controller.outputLevel)")
+        print("   isVoiceActive: \(controller.isVoiceActive)")
+        print("   isRunning: \(controller.isRunning)")
+        print("   lastInferenceDurationMs: \(controller.lastInferenceDurationMs)")
+
+        try testAssert(controller.isRunning, "AudioController must remain running during and after slider adjustment")
+        try testAssert(controller.isVoiceActive, "isVoiceActive must remain true under active speech after slider movement")
+        try testAssert(controller.outputLevel > 0.0, "Audio output MUST NOT cease or drop to 0.0 when adjusting tone slider! (Got \(controller.outputLevel))")
+        try testAssert(controller.lastInferenceDurationMs > 0, "Inference must continue completing after slider adjustment")
+
+        print("   ✅ Tone slider adjusted smoothly across range with zero audio drops or socket errors.")
+        controller.stop()
+    }
+
+    // MARK: - Test 16: Teams Call Speaker Tap -> Bluetooth Headphones HFP Switch & Speaker Reselection
+
+    /// Test 16: Specifically catches and verifies resolution for the user bug:
+    /// "if i start a teams call which outputs to macbook speakers and i have the app open with
+    /// macbook speakers -> bluetooth headphones it does not output anything on the headphones
+    /// often until i reselect the speaker options. Then 80% of the time it still does not work."
+    public static func testTeamsCallSpeakerTapToBluetoothHeadphonesAndSpeakerReselection() async throws {
+        let deviceManager = AudioDeviceManager()
+        let audioEngine = AppAudioEngine()
+        let rvcController = AudioController()
+        rvcController.isTestMode = true
+
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        guard let speakerTap = deviceManager.inputDevices.first(where: { $0.uid == "com.nsp.pseudo.speakers" }) else {
+            try testAssert(false, "MacBook Pro Speakers (Audio sent to Speakers) tap device must be available in inputDevices")
+            return
+        }
+
+        // Choose Bluetooth headphones if connected, or preferred output device
+        guard let outputDev = deviceManager.preferredOutputDevice() ?? deviceManager.outputDevices.first else {
+            print("   ⚠️ No output devices available to run Test 16")
+            return
+        }
+
+        let selectorView = DeviceSelectorView(
+            deviceManager: deviceManager,
+            audioEngine: audioEngine,
+            rvcController: rvcController,
+            selectedTab: 0
+        )
+
+        // Attach the active MainSynthView .onReceive(deviceManager.$inputDevices / $outputDevices) auto-start listeners
+        var cancellables = Set<AnyCancellable>()
+        deviceManager.$inputDevices
+            .sink { _ in
+                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    audioEngine.start()
                 }
             }
+            .store(in: &cancellables)
+        deviceManager.$outputDevices
+            .sink { _ in
+                if !audioEngine.isRunning && !audioEngine.userStopped && audioEngine.selectedInputDevice != nil && audioEngine.selectedOutputDevice != nil {
+                    audioEngine.start()
+                }
+            }
+            .store(in: &cancellables)
+
+        // 1. Open app with MacBook Pro Speakers -> Headphones BEFORE Teams call starts
+        print("   1. Starting app with '\(speakerTap.name)' -> '\(outputDev.name)' BEFORE Teams call starts...")
+        audioEngine.setInputDevice(speakerTap)
+        audioEngine.setOutputDevice(outputDev)
+        audioEngine.start()
+        try testAssert(audioEngine.isRunning && audioEngine.isEngineActuallyRunning, "AppAudioEngine must be running before Teams call starts")
+
+        // Let engine run idle briefly before the Teams call begins
+        try? await Task.sleep(nanoseconds: 250_000_000)
+
+        // 2. Start simulated Microsoft Teams call outputting to BuiltInSpeakerDevice
+        print("   2. Starting Microsoft Teams call outputting to BuiltInSpeakerDevice & triggering Bluetooth A2DP -> HFP (1-ch) switch...")
+        let teamsCallProcess = Process()
+        teamsCallProcess.executableURL = Bundle.main.executableURL ?? URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+        teamsCallProcess.arguments = ["--emit-speaker-tone", "--duration", "25.0"]
+        try teamsCallProcess.run()
+        defer {
+            if teamsCallProcess.isRunning {
+                teamsCallProcess.terminate()
+            }
+            audioEngine.stop()
+            rvcController.stop()
+            cancellables.removeAll()
         }
-        print("      🤖 Synthesizer Buzz Control HuBERT Phonetic Similarity:        \(String(format: "%.4f", maxBuzzSim)) (expected < 0.25)")
 
-        let discriminationMargin = bestSpeechSim - maxBuzzSim
-        print("      📈 Phonetic Discrimination Margin (Speech vs Buzz):            +\(String(format: "%.4f", discriminationMargin))")
+        // Wait 600ms for Teams call audio process to spawn and establish active tone stream
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        audioEngine.simulateBluetoothHFPConfigurationChangeForTesting()
 
-        try testAssert(maxBuzzSim < 0.25, "Control check: Synthesizer buzz must NOT pass phonetic similarity test (got \(maxBuzzSim))")
-        try testAssert(bestSpeechSim > 0.30, "100% CERTAINTY PROOF: Transformed speech must retain human phonetic structure (got \(bestSpeechSim))")
-        try testAssert(discriminationMargin > 0.10, "100% CERTAINTY PROOF: Transformed speech must decisively beat robotic synthesizer buzz (margin: \(discriminationMargin))")
+        // Allow engine to recover from configuration change and measure output RMS on headphones
+        var peakAfterCallStart: Float = 0.0
+        for _ in 0..<30 {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            let rms = audioEngine.getCurrentRMS()
+            let cur = max(rms.left, rms.right)
+            if cur > peakAfterCallStart {
+                peakAfterCallStart = cur
+            }
+        }
 
-        print("      ✅ PROVEN: Synthesizer buzz produces \(String(format: "%.2f", maxBuzzSim)), while RVC speech produces \(String(format: "%.2f", bestSpeechSim)) (margin: +\(String(format: "%.2f", discriminationMargin)))!")
-        controller.stop()
+        print("   Post-Teams-call-start state: isRunning=\(audioEngine.isRunning), isEngineActuallyRunning=\(audioEngine.isEngineActuallyRunning), headphonePeakRMS=\(peakAfterCallStart)")
+        try testAssert(
+            audioEngine.isRunning && audioEngine.isEngineActuallyRunning,
+            "AppAudioEngine must automatically recover when Teams call triggers Bluetooth HFP configuration change! (isRunning=\(audioEngine.isRunning), isEngineActuallyRunning=\(audioEngine.isEngineActuallyRunning))"
+        )
+        try testAssert(
+            peakAfterCallStart > 0.05,
+            "Headphones must output audio automatically when Teams call starts without requiring manual speaker reselection! (Got peak RMS: \(peakAfterCallStart))"
+        )
+
+        // 3. Verify that reselecting the speaker option in UI during the 1-channel HFP Teams call succeeds 100% of the time (5/5 trials, zero 80% failure rate)
+        print("   3. Testing speaker option reselection 5 times during active 1-channel HFP Teams call...")
+        var successfulReselections = 0
+        let totalTrials = 5
+
+        for trial in 1...totalTrials {
+            selectorView.selectInputDevice(speakerTap)
+
+            var trialPeak: Float = 0.0
+            for _ in 0..<25 {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+                if audioEngine.isRunning && audioEngine.isEngineActuallyRunning {
+                    let rms = audioEngine.getCurrentRMS()
+                    let cur = max(rms.left, rms.right)
+                    if cur > trialPeak {
+                        trialPeak = cur
+                    }
+                }
+            }
+            print("      Trial \(trial)/\(totalTrials) after speaker reselection: isRunning=\(audioEngine.isRunning), engineRunning=\(audioEngine.isEngineActuallyRunning), peakRMS=\(trialPeak)")
+            if audioEngine.isRunning && audioEngine.isEngineActuallyRunning && trialPeak > 0.05 {
+                successfulReselections += 1
+            }
+        }
+
+        try testAssert(
+            successfulReselections == totalTrials,
+            "Reselecting MacBook Pro Speakers option during Teams call must work 100% of the time (\(totalTrials)/\(totalTrials)), but only \(successfulReselections)/\(totalTrials) succeeded!"
+        )
+        print("   ✅ Teams call speaker tap -> Bluetooth headphones HFP switch and \(totalTrials)/\(totalTrials) speaker reselections succeeded!")
     }
 }

@@ -766,15 +766,6 @@ import MLXNN
         ) async throws -> MLXArray {
             // chunk: [T] - 16kHz
             
-            // DEBUG: Log audio input stats
-            log("DEBUG: Audio input - shape: \(chunk.shape), min: \(chunk.min().item(Float.self)), max: \(chunk.max().item(Float.self)), mean: \(chunk.mean().item(Float.self))")
-            
-            // Log first 20 audio samples
-            let audioSlice = chunk[0..<min(20, chunk.shape[0])].asType(Float.self)
-            MLX.eval(audioSlice)
-            let audioSamples = audioSlice.asArray(Float.self)
-            log("DEBUG: Audio input (padded, filtered) first 20 samples: \(audioSamples)")
-             
             // 1. Hubert Feature Extraction (16kHz -> 50fps)
             let audioInput = chunk.expandedDimensions(axis: 0) // [1, T]
             guard let hubertModel = hubertModel else {

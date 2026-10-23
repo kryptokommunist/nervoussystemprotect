@@ -56,13 +56,22 @@ final class SystemAudioTap {
         stop()
 
         // 1. Exclude our own process so our processed output is not captured again.
-        guard let ownProcess = Self.processObject(for: getpid()) else {
-            throw TapError.ownProcessNotFound
+        let excludedProcesses: [AudioObjectID]
+        if let ownProcess = Self.processObject(for: getpid()) {
+            excludedProcesses = [ownProcess]
+        } else {
+            excludedProcesses = []
         }
 
-        let desc = CATapDescription(stereoGlobalTapButExcludeProcesses: [ownProcess])
+        let desc: CATapDescription
         if let targetUID = targetDeviceUID {
-            desc.deviceUID = targetUID
+            desc = CATapDescription(
+                __excludingProcesses: excludedProcesses.map { NSNumber(value: $0) },
+                andDeviceUID: targetUID,
+                withStream: 0
+            )
+        } else {
+            desc = CATapDescription(stereoGlobalTapButExcludeProcesses: excludedProcesses)
         }
         desc.uuid = UUID()
         desc.name = "NSP System Tap"
@@ -83,16 +92,28 @@ final class SystemAudioTap {
         var fmtSize = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         AudioObjectGetPropertyData(tapID, &fmtAddr, 0, nil, &fmtSize, &tapFormat)
 
-        // 3. Private aggregate device that hosts the tap, clocked by the output device.
+        // 3. Private aggregate device that hosts the tap.
+        // When tapping a specific hardware device (e.g. BuiltInSpeakerDevice), clock the aggregate
+        // directly from that target device (or BuiltInSpeakerDevice when clockDeviceUID is Bluetooth)
+        // so we never attach a competing HAL stream to Bluetooth headphones during HFP/A2DP transitions.
+        let effectiveClockUID: String
+        if let targetUID = targetDeviceUID, Self.deviceExists(uid: targetUID) {
+            effectiveClockUID = targetUID
+        } else if Self.isBluetoothDevice(uid: clockDeviceUID), Self.deviceExists(uid: "BuiltInSpeakerDevice") {
+            effectiveClockUID = "BuiltInSpeakerDevice"
+        } else {
+            effectiveClockUID = clockDeviceUID
+        }
+
         let aggDesc: [String: Any] = [
             kAudioAggregateDeviceNameKey: "NSP System Tap Device",
             kAudioAggregateDeviceUIDKey: "com.nsp.systemtap.\(UUID().uuidString)",
-            kAudioAggregateDeviceMainSubDeviceKey: clockDeviceUID,
+            kAudioAggregateDeviceMainSubDeviceKey: effectiveClockUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
             kAudioAggregateDeviceTapAutoStartKey: true,
             kAudioAggregateDeviceSubDeviceListKey: [
-                [kAudioSubDeviceUIDKey: clockDeviceUID]
+                [kAudioSubDeviceUIDKey: effectiveClockUID]
             ],
             kAudioAggregateDeviceTapListKey: [
                 [
@@ -103,6 +124,12 @@ final class SystemAudioTap {
         ]
         var newAgg = AudioObjectID(kAudioObjectUnknown)
         status = AudioHardwareCreateAggregateDevice(aggDesc as CFDictionary, &newAgg)
+        if (status != noErr || newAgg == kAudioObjectUnknown) && effectiveClockUID != clockDeviceUID {
+            var fallbackDesc = aggDesc
+            fallbackDesc[kAudioAggregateDeviceMainSubDeviceKey] = clockDeviceUID
+            fallbackDesc[kAudioAggregateDeviceSubDeviceListKey] = [[kAudioSubDeviceUIDKey: clockDeviceUID]]
+            status = AudioHardwareCreateAggregateDevice(fallbackDesc as CFDictionary, &newAgg)
+        }
         guard status == noErr, newAgg != kAudioObjectUnknown else {
             stop()
             throw TapError.createAggregate(status)
@@ -218,5 +245,47 @@ final class SystemAudioTap {
         )
         guard status == noErr, object != kAudioObjectUnknown else { return nil }
         return object
+    }
+
+    private static func deviceID(for uid: String) -> AudioDeviceID? {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var cfUID: CFString = uid as CFString
+        var devID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = withUnsafePointer(to: &cfUID) { ptr in
+            AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &addr,
+                UInt32(MemoryLayout<CFString>.size),
+                ptr,
+                &size,
+                &devID
+            )
+        }
+        guard status == noErr, devID != 0, devID != kAudioObjectUnknown else { return nil }
+        return devID
+    }
+
+    private static func deviceExists(uid: String) -> Bool {
+        return deviceID(for: uid) != nil
+    }
+
+    private static func isBluetoothDevice(uid: String) -> Bool {
+        guard let devID = deviceID(for: uid) else { return false }
+        var transAddr = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transType: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(devID, &transAddr, 0, nil, &size, &transType) == noErr else {
+            return false
+        }
+        return transType == kAudioDeviceTransportTypeBluetooth || transType == kAudioDeviceTransportTypeBluetoothLE
     }
 }

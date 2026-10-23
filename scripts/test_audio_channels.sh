@@ -11,8 +11,9 @@ set -e
 # 4. Global System Audio tap
 # 5. Microsoft Teams Audio loopback (if installed)
 # 6. AudioController neural pipeline with live microphone
-# 7. Idiot-safe auto-start on device assignment
-# 8. Real-time DSP controls (pitch, warmth filter, mix, volume, bypass)
+# 7. OpenVoice V2 Tone Color Converter pipeline (Unix socket daemon & voice cloning)
+# 8. Idiot-safe auto-start on device assignment
+# 9. Real-time DSP controls (pitch, warmth filter, mix, volume, bypass)
 # ==============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

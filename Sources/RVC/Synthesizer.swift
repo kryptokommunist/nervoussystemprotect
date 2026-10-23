@@ -206,11 +206,9 @@ class TextEncoder: Module {
     func callAsFunction(_ phone: MLXArray, pitch: MLXArray?, lengths: MLXArray) -> (MLXArray, MLXArray, MLXArray) {
         // phone: (B, L, EmbDim), pitch: (B, L), lengths: (B,)
         var x = emb_phone(phone)
-        print("DEBUG: TextEncoder emb_phone: min \(x.min().item(Float.self)), max \(x.max().item(Float.self))")
         
         if let pitch = pitch, let embPitch = emb_pitch {
             let pEmb = embPitch(pitch)
-            print("DEBUG: TextEncoder emb_pitch: min \(pEmb.min().item(Float.self)), max \(pEmb.max().item(Float.self))")
             x = x + pEmb
         }
         

@@ -148,14 +148,20 @@ public final class AudioDeviceManager: ObservableObject {
             if hasOutput { outputs.append(info) }
         }
 
-        if Thread.isMainThread {
-            self.inputDevices = inputs
-            self.outputDevices = outputs
-        } else {
-            DispatchQueue.main.async {
+        let applyUpdates = { [weak self] in
+            guard let self = self else { return }
+            if self.inputDevices != inputs {
                 self.inputDevices = inputs
+            }
+            if self.outputDevices != outputs {
                 self.outputDevices = outputs
             }
+        }
+
+        if Thread.isMainThread {
+            applyUpdates()
+        } else {
+            DispatchQueue.main.async(execute: applyUpdates)
         }
     }
 

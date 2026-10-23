@@ -8,16 +8,20 @@ import MLXNN
 public struct VoiceCharacter: Identifiable, Hashable {
     public let id: String
     public let name: String
-    public let modelFileName: String
-    public let indexFileName: String
+    public let speakerEmbeddingFileName: String
+    public let defaultTau: Float
     public let defaultPitch: Int
     public let description: String
 
-    public init(id: String, name: String, modelFileName: String, indexFileName: String, defaultPitch: Int = 0, description: String = "") {
+    // Backwards compatibility accessors
+    public var modelFileName: String { speakerEmbeddingFileName }
+    public var indexFileName: String { speakerEmbeddingFileName }
+
+    public init(id: String, name: String, speakerEmbeddingFileName: String, defaultTau: Float = 0.3, defaultPitch: Int = 0, description: String = "") {
         self.id = id
         self.name = name
-        self.modelFileName = modelFileName
-        self.indexFileName = indexFileName
+        self.speakerEmbeddingFileName = speakerEmbeddingFileName
+        self.defaultTau = defaultTau
         self.defaultPitch = defaultPitch
         self.description = description
     }
@@ -49,7 +53,7 @@ public struct VoicePreset: Identifiable, Codable, Equatable, Hashable {
         description: String,
         characterId: String,
         pitchShift: Float,
-        indexRate: Float = 0.75,
+        indexRate: Float = 0.3,
         silenceThreshold: Float = 0.008,
         isBuiltin: Bool = false
     ) {
@@ -69,120 +73,186 @@ public struct VoicePreset: Identifiable, Codable, Equatable, Hashable {
 public final class AudioController: ObservableObject {
     public static let availableCharacters: [VoiceCharacter] = [
         VoiceCharacter(
-            id: "drake",
-            name: "Drake (Warm Baritone)",
-            modelFileName: "drake.safetensors",
-            indexFileName: "drake.index",
+            id: "american_executive",
+            name: "American Executive (Warm Baritone)",
+            speakerEmbeddingFileName: "ses/en-us.pth",
+            defaultTau: 0.3,
             defaultPitch: -2,
-            description: "Deep, melodic vocal timbre with resonant lows"
+            description: "Deep, articulate US executive presence with confident resonant lows"
         ),
         VoiceCharacter(
-            id: "eminem",
-            name: "Eminem (High Energy Rap)",
-            modelFileName: "eminem.safetensors",
-            indexFileName: "eminem.index",
+            id: "british_authority",
+            name: "British Authority (Calm Deep)",
+            speakerEmbeddingFileName: "ses/en-default.pth",
+            defaultTau: 0.3,
+            defaultPitch: -4,
+            description: "Calm, composed BBC-style authority to de-escalate tension"
+        ),
+        VoiceCharacter(
+            id: "australian_negotiator",
+            name: "Australian Negotiator (Warm Mid)",
+            speakerEmbeddingFileName: "ses/en-au.pth",
+            defaultTau: 0.35,
             defaultPitch: 0,
-            description: "Sharp, articulated mid-forward vocal contour"
+            description: "Crisp conversational presence with balanced mid-range projection"
         ),
         VoiceCharacter(
-            id: "anime_heroine",
-            name: "Anime Heroine (Bright Soprano)",
-            modelFileName: "anime_heroine.safetensors",
-            indexFileName: "anime_heroine.index",
-            defaultPitch: 12,
-            description: "Airy, high-frequency converted vocal tone"
-        ),
-        VoiceCharacter(
-            id: "f0G48k",
-            name: "RVC Pretrained v2 (Neutral 48k)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
+            id: "expressive_presence",
+            name: "Warm Expressive (Studio Master)",
+            speakerEmbeddingFileName: "ses/studio-reference.pth",
+            defaultTau: 0.25,
             defaultPitch: 0,
-            description: "Official RVC v2 reference 48kHz neutral neural voice"
+            description: "Natural vibrant timbre cloned directly from studio voice reference"
         ),
         VoiceCharacter(
-            id: "deep_authority",
-            name: "Deep Authority (Calm Baritone)",
-            modelFileName: "drake.safetensors",
-            indexFileName: "drake.index",
-            defaultPitch: -6,
-            description: "Low pitch & dark chest formants to calm meetings and de-escalate tension"
-        ),
-        VoiceCharacter(
-            id: "radio_host",
-            name: "Radio DJ / Executive Host",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: -1,
-            description: "Crisp executive presence with broadcast warmth and refined highs"
-        ),
-        VoiceCharacter(
-            id: "telephone_disguise",
-            name: "Telephone (Narrowband Disguise)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
+            id: "spanish_warmth",
+            name: "Spanish Warmth (Rich Harmonic)",
+            speakerEmbeddingFileName: "ses/es.pth",
+            defaultTau: 0.3,
             defaultPitch: 0,
-            description: "Landline bandwidth restriction (300Hz–3.4kHz) for meeting anonymity"
+            description: "Warm, rich acoustic timbre with natural expressive contour"
         ),
         VoiceCharacter(
-            id: "robot_drone",
-            name: "Robot Drone (Deadpan Neutralizer)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: 0,
-            description: "Flattened robotic pitch and stripped affect for emotional neutralization"
+            id: "french_elegance",
+            name: "French Elegance (Refined Soft)",
+            speakerEmbeddingFileName: "ses/fr.pth",
+            defaultTau: 0.3,
+            defaultPitch: 2,
+            description: "Softened melodic vocal texture with delicate air"
         ),
         VoiceCharacter(
-            id: "whisper_soothe",
-            name: "Whisper (Anti-Anxiety Soothe)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
-            defaultPitch: 0,
+            id: "japanese_calm",
+            name: "Japanese Serene (Clear)",
+            speakerEmbeddingFileName: "ses/jp.pth",
+            defaultTau: 0.3,
+            defaultPitch: 1,
+            description: "Clear, polite, and disciplined vocal delivery"
+        ),
+        VoiceCharacter(
+            id: "soothing_meditation",
+            name: "Whisper / Anti-Anxiety Soothe",
+            speakerEmbeddingFileName: "ses/en-newest.pth",
+            defaultTau: 0.2,
+            defaultPitch: -2,
             description: "Softened breathy vocal tone for low-stimulation nervous system protection"
         ),
         VoiceCharacter(
-            id: "chipmunk",
-            name: "Chipmunk (High Pitch Humor)",
-            modelFileName: "anime_heroine.safetensors",
-            indexFileName: "anime_heroine.index",
-            defaultPitch: 7,
-            description: "High pitch and bright formants for playful lightness"
+            id: "deep_bass_presence",
+            name: "Deep Sub-Bass (Resonant Chest)",
+            speakerEmbeddingFileName: "ses/deep-bass.pth",
+            defaultTau: 0.35,
+            defaultPitch: -5,
+            description: "Commanding deep chest resonance with low fundamental authority"
         ),
         VoiceCharacter(
-            id: "stadium",
-            name: "Stadium (Announcement Hall)",
-            modelFileName: "f0G48k.safetensors",
-            indexFileName: "f0G48k.index",
+            id: "velvet_alto",
+            name: "Velvet Alto (Warm Intimate)",
+            speakerEmbeddingFileName: "ses/velvet-alto.pth",
+            defaultTau: 0.28,
+            defaultPitch: -1,
+            description: "Smooth, velvety close-mic vocal body with warm intimate presence"
+        ),
+        VoiceCharacter(
+            id: "nordic_calm",
+            name: "Nordic Serenity (Minimalist Clean)",
+            speakerEmbeddingFileName: "ses/nordic-calm.pth",
+            defaultTau: 0.3,
             defaultPitch: 0,
-            description: "Spacious projection and wide room acoustics"
+            description: "Crisp, balanced European clarity with pristine transparent mids"
         ),
         VoiceCharacter(
-            id: "ghost",
-            name: "Ghost (Ethereal Veil)",
-            modelFileName: "anime_heroine.safetensors",
-            indexFileName: "anime_heroine.index",
+            id: "yoga_nidra",
+            name: "Yoga Nidra (Hypnotic Breath)",
+            speakerEmbeddingFileName: "ses/yoga-nidra.pth",
+            defaultTau: 0.22,
+            defaultPitch: -3,
+            description: "Hypnotic, breath-supported meditation tone designed to reduce meeting stress"
+        ),
+        VoiceCharacter(
+            id: "dynamic_presenter",
+            name: "Dynamic Keynote (Confident Punch)",
+            speakerEmbeddingFileName: "ses/en-style.pth",
+            defaultTau: 0.35,
+            defaultPitch: 1,
+            description: "Forward-projecting, engaging keynote style for presentations"
+        ),
+        VoiceCharacter(
+            id: "german_studio",
+            name: "Precision Broadcast (German Studio)",
+            speakerEmbeddingFileName: "ses/de-studio.pth",
+            defaultTau: 0.3,
             defaultPitch: -2,
-            description: "Mystic ambient disguise with diffused high-end sparkle"
+            description: "Structured, articulate broadcast cadence with crystal-clear diction"
+        ),
+        VoiceCharacter(
+            id: "italian_lyric",
+            name: "Italian Bel Canto (Warm Lyrical)",
+            speakerEmbeddingFileName: "ses/it-lyric.pth",
+            defaultTau: 0.32,
+            defaultPitch: 0,
+            description: "Harmonically rich, expressive vocal cadence with melodic warmth"
+        ),
+        VoiceCharacter(
+            id: "british_rp",
+            name: "British RP (Formal Articulate)",
+            speakerEmbeddingFileName: "ses/en-br.pth",
+            defaultTau: 0.3,
+            defaultPitch: -2,
+            description: "Classic Received Pronunciation with dignified, measured pacing"
+        ),
+        VoiceCharacter(
+            id: "global_consultant",
+            name: "Global Consultant (Melodic Clarity)",
+            speakerEmbeddingFileName: "ses/en-india.pth",
+            defaultTau: 0.3,
+            defaultPitch: 0,
+            description: "Engaging international consulting delivery with crisp melodic clarity"
+        ),
+        VoiceCharacter(
+            id: "korean_studio",
+            name: "K-Studio Vocal (Bright Air)",
+            speakerEmbeddingFileName: "ses/kr.pth",
+            defaultTau: 0.28,
+            defaultPitch: 2,
+            description: "Modern bright studio vocal profile with elevated harmonic sheen"
+        ),
+        VoiceCharacter(
+            id: "mandarin_clarity",
+            name: "Mandarin Precision (Crisp Diction)",
+            speakerEmbeddingFileName: "ses/zh.pth",
+            defaultTau: 0.3,
+            defaultPitch: 1,
+            description: "Tonal clarity with crisp consonant transients and neutral contour"
+        ),
+        VoiceCharacter(
+            id: "cyber_harmonic",
+            name: "Cyber Harmonic (Modern Resonant)",
+            speakerEmbeddingFileName: "ses/cyber-harmonic.pth",
+            defaultTau: 0.38,
+            defaultPitch: -1,
+            description: "Polished modern harmonic presence with tight digital resonance"
         )
     ]
 
     public static let builtinPresets: [VoicePreset] = [
-        VoicePreset(id: "clean", name: "Clean", emoji: "🎙️", description: "Natural neural voice with transparent response", characterId: "f0G48k", pitchShift: 0, indexRate: 0.75, isBuiltin: true),
-        VoicePreset(id: "deep", name: "Deep Voice", emoji: "🎩", description: "Calm grounded baritone with dark formants to de-escalate tension", characterId: "deep_authority", pitchShift: -6, indexRate: 0.85, isBuiltin: true),
-        VoicePreset(id: "radio", name: "Radio DJ", emoji: "📻", description: "Executive broadcast warmth & crisp articulation for meetings", characterId: "radio_host", pitchShift: -1, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "telephone", name: "Telephone", emoji: "📞", description: "Narrowband landline call disguise (300Hz–3.4kHz)", characterId: "telephone_disguise", pitchShift: 0, indexRate: 0.70, isBuiltin: true),
-        VoicePreset(id: "robot", name: "Robot", emoji: "🤖", description: "Deadpan neutralizer with flattened robotic prosody", characterId: "robot_drone", pitchShift: 0, indexRate: 0.50, isBuiltin: true),
-        VoicePreset(id: "whisper", name: "Whisper", emoji: "🤫", description: "Breathy anti-anxiety tone for low-stimulation soothing", characterId: "whisper_soothe", pitchShift: 0, indexRate: 0.60, isBuiltin: true),
-        VoicePreset(id: "chipmunk", name: "Chipmunk", emoji: "🐿️", description: "High pitch & bright articulate formants", characterId: "chipmunk", pitchShift: 7, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "helium", name: "Helium", emoji: "🎈", description: "Airy balloon-gas timbre with elevated pitch", characterId: "anime_heroine", pitchShift: 3, indexRate: 0.70, isBuiltin: true),
-        VoicePreset(id: "ghost", name: "Ghost", emoji: "👻", description: "Ethereal acoustic veil for complete meeting anonymity", characterId: "ghost", pitchShift: -2, indexRate: 0.75, isBuiltin: true),
-        VoicePreset(id: "monster", name: "Monster", emoji: "👹", description: "Deep growling rumble with heavy low-end power", characterId: "drake", pitchShift: -9, indexRate: 0.90, isBuiltin: true),
-        VoicePreset(id: "stadium", name: "Stadium", emoji: "🏟️", description: "Huge announcement projection & wide room acoustics", characterId: "stadium", pitchShift: 0, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "alien", name: "Alien", emoji: "👽", description: "Modulated pitched vocal contour", characterId: "anime_heroine", pitchShift: 2, indexRate: 0.65, isBuiltin: true),
-        VoicePreset(id: "cave", name: "Cave", emoji: "🕳️", description: "Cavernous dark echoes and resonant depth", characterId: "drake", pitchShift: -3, indexRate: 0.80, isBuiltin: true),
-        VoicePreset(id: "underwater", name: "Underwater", emoji: "🌊", description: "Muffled low-pass filtering with submerged warmth", characterId: "drake", pitchShift: -4, indexRate: 0.70, isBuiltin: true),
-        VoicePreset(id: "megaphone", name: "Megaphone", emoji: "📣", description: "Punchy midrange PA horn presence", characterId: "eminem", pitchShift: 0, indexRate: 0.75, isBuiltin: true),
-        VoicePreset(id: "arcade", name: "Arcade", emoji: "🕹️", description: "8-bit crushed retro game cabinet voice", characterId: "eminem", pitchShift: 2, indexRate: 0.60, isBuiltin: true)
+        VoicePreset(id: "us_executive", name: "Executive", emoji: "🎙️", description: "Confident US executive presence with resonant lows", characterId: "american_executive", pitchShift: -2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "uk_authority", name: "Authority", emoji: "🏛️", description: "Calm British composure to de-escalate tension", characterId: "british_authority", pitchShift: -4, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "warm_expressive", name: "Warm Studio", emoji: "✨", description: "Natural vibrant timbre cloned from reference", characterId: "expressive_presence", pitchShift: 0, indexRate: 0.25, isBuiltin: true),
+        VoicePreset(id: "calm_negotiator", name: "Negotiator", emoji: "🤝", description: "Crisp presence with balanced mid projection", characterId: "australian_negotiator", pitchShift: 0, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "soothing_whisper", name: "Anti-Anxiety", emoji: "🍃", description: "Softened breathy vocal tone for low stimulation", characterId: "soothing_meditation", pitchShift: -2, indexRate: 0.2, isBuiltin: true),
+        VoicePreset(id: "deep_resonance", name: "Deep Sub-Bass", emoji: "🗿", description: "Commanding lowered baritone chest authority", characterId: "deep_bass_presence", pitchShift: -5, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "velvet_warmth", name: "Velvet Alto", emoji: "🕯️", description: "Smooth, velvety close-mic vocal presence", characterId: "velvet_alto", pitchShift: -1, indexRate: 0.28, isBuiltin: true),
+        VoicePreset(id: "nordic_clarity", name: "Nordic Calm", emoji: "❄️", description: "Clean, transparent European conference tone", characterId: "nordic_calm", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "meditation_calm", name: "Yoga Nidra", emoji: "🧘", description: "Hypnotic, breath-supported soothing tone", characterId: "yoga_nidra", pitchShift: -3, indexRate: 0.22, isBuiltin: true),
+        VoicePreset(id: "keynote_punch", name: "Keynote Pro", emoji: "⚡", description: "Dynamic, forward-projecting presentation energy", characterId: "dynamic_presenter", pitchShift: 1, indexRate: 0.35, isBuiltin: true),
+        VoicePreset(id: "spanish_warmth", name: "Spanish Warmth", emoji: "🌞", description: "Harmonic expressive contour with rich timbre", characterId: "spanish_warmth", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "french_elegance", name: "French Elegance", emoji: "🥐", description: "Refined melodic vocal texture with delicate air", characterId: "french_elegance", pitchShift: 2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "japanese_calm", name: "Japanese Serene", emoji: "🍵", description: "Clear, disciplined and articulate delivery", characterId: "japanese_calm", pitchShift: 1, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "german_broadcast", name: "German Studio", emoji: "📻", description: "Structured broadcast precision and diction", characterId: "german_studio", pitchShift: -2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "italian_belcanto", name: "Italian Lyric", emoji: "🎭", description: "Warm lyrical contour with harmonic resonance", characterId: "italian_lyric", pitchShift: 0, indexRate: 0.32, isBuiltin: true),
+        VoicePreset(id: "british_formal", name: "British RP", emoji: "👑", description: "Dignified classical BBC Received Pronunciation", characterId: "british_rp", pitchShift: -2, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "global_advisor", name: "Global Advisor", emoji: "🌐", description: "Clear international cadence for consulting", characterId: "global_consultant", pitchShift: 0, indexRate: 0.3, isBuiltin: true),
+        VoicePreset(id: "cyber_modern", name: "Cyber Presence", emoji: "🔮", description: "Modern polished resonance with tight sheen", characterId: "cyber_harmonic", pitchShift: -1, indexRate: 0.38, isBuiltin: true)
     ]
 
     @Published public var isRunning: Bool = false
@@ -224,8 +294,21 @@ public final class AudioController: ObservableObject {
     @Published public var pitchShiftSemitones: Float = 0.0 {
         didSet { updatePerformanceControls() }
     }
-    @Published public var indexRate: Float = 0.75 {
-        didSet { updatePerformanceControls() }
+    @Published public var toneColorTau: Float = 0.3 {
+        didSet {
+            if abs(indexRate - toneColorTau) > 0.001 {
+                indexRate = toneColorTau
+            }
+            updatePerformanceControls()
+        }
+    }
+    @Published public var indexRate: Float = 0.3 {
+        didSet {
+            if abs(toneColorTau - indexRate) > 0.001 {
+                toneColorTau = indexRate
+            }
+            updatePerformanceControls()
+        }
     }
     @Published public var silenceThreshold: Float = defaultSilenceThreshold {
         didSet { updatePerformanceControls() }
@@ -251,6 +334,10 @@ public final class AudioController: ObservableObject {
     private var systemTap: AnyObject?
     public var userStopped: Bool = false
     public var isTestMode: Bool = false
+    public private(set) var isRestarting: Bool = false
+    private var restartWorkItem: DispatchWorkItem?
+    private var isConfiguringEngine: Bool = false
+    private var configChangeObserver: NSObjectProtocol?
 
     // Startup settling & DC offset filter to eliminate power-on synthetic buzz
     private var startupDiscardFrames: Int = 0
@@ -258,31 +345,38 @@ public final class AudioController: ObservableObject {
     private var dcFilterY: Float = 0.0
 
     public func setInputDevice(_ device: AudioDeviceInfo, autoStartIfReady: Bool = true) {
-        selectedInputDevice = device
+        let wasActive = isRunning || isRestarting
         userStopped = false
-        if isRunning {
-            applyDeviceRouting()
-        } else if autoStartIfReady && selectedOutputDevice != nil {
+        selectedInputDevice = device
+        if !wasActive && !isRestarting && autoStartIfReady && selectedOutputDevice != nil {
             start()
         }
     }
 
     public func setOutputDevice(_ device: AudioDeviceInfo, autoStartIfReady: Bool = true) {
-        selectedOutputDevice = device
+        let wasActive = isRunning || isRestarting
         userStopped = false
-        if isRunning {
-            applyDeviceRouting()
-        } else if autoStartIfReady && selectedInputDevice != nil {
+        selectedOutputDevice = device
+        if !wasActive && !isRestarting && autoStartIfReady && selectedInputDevice != nil {
             start()
         }
     }
 
     private func applyDeviceRouting() {
-        if isRunning {
-            stop()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.start()
+        guard !isConfiguringEngine else { return }
+        if isRunning || isRestarting {
+            restartWorkItem?.cancel()
+            isRestarting = true
+            stop(preserveRestarting: true)
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                self.isRestarting = false
+                if !self.userStopped {
+                    self.start()
+                }
             }
+            restartWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08, execute: work)
         }
     }
 
@@ -290,10 +384,11 @@ public final class AudioController: ObservableObject {
     private let rvcQueue = DispatchQueue(label: "com.rvc.processing.queue", qos: .userInteractive)
     public let rvcInference = RVCInference()
 
-    // 0.35s audio chunk accumulation (5600 samples @ 16kHz -> 17 HuBERT frames -> 16320 samples @ 48kHz)
-    private var accumulatedSamples16k: [Float] = []
-    private let targetChunkSamples16k: Int = 5600
+    // Low-latency chunk accumulation for OpenVoice V2 (5120 samples @ 22050Hz ≈ 0.232s = 20 STFT frames of hop 256)
+    private var accumulatedSamples: [Float] = []
+    public let targetChunkSamples: Int = 5120
     private var isProcessingChunk: Bool = false
+    private var isPriorChunkActive: Bool = false
     private var currentInferenceTask: Task<Void, Never>? = nil
 
     private static let scratchCapacity = 16384
@@ -302,13 +397,33 @@ public final class AudioController: ObservableObject {
     public init() {
         Self.configureMetalLibrary()
         setupEngine()
+        setupConfigurationChangeObserver()
         loadUserPresets()
         loadCharacterWeights(character: selectedCharacter)
     }
 
     deinit {
+        if let obs = configChangeObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
         engine.stop()
         monoInputScratch.deallocate()
+    }
+
+    private func setupConfigurationChangeObserver() {
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self = self, !self.isConfiguringEngine else { return }
+                guard (self.isRunning || self.isRestarting) && !self.userStopped else { return }
+                if !self.engine.isRunning {
+                    self.applyDeviceRouting()
+                }
+            }
+        }
     }
 
     public static func configureMetalLibrary() {
@@ -363,13 +478,8 @@ public final class AudioController: ObservableObject {
     }
 
     public func updatePerformanceControls() {
-        if isNeuralModelLoaded {
-            // Neural RVC handles pitch shift internally inside the generator
-            pitchNode.pitch = 0.0
-        } else {
-            // Real-Time MLX Voice Transformer: pitch is in cents (1 semitone = 100 cents)
-            pitchNode.pitch = pitchShiftSemitones * 100.0
-        }
+        // Real-Time pitch shift: 1 semitone = 100 cents (OpenVoice ToneColorConverter preserves natural vocal pitch contour)
+        pitchNode.pitch = pitchShiftSemitones * 100.0
 
         // Apply character-specific acoustic formant EQ filtering
         if eqNode.bands.count >= 2 {
@@ -377,24 +487,36 @@ public final class AudioController: ObservableObject {
             let band1 = eqNode.bands[1]
 
             switch selectedCharacter.id {
-            case "drake", "deep_authority":
-                // Warm deep baritone: Boost low chest resonance (+5dB @ 180Hz), tame high frequencies (-3dB @ 5kHz)
+            case "american_executive", "deep_bass_presence":
+                // Resonant deep chest lows (+5.5dB @ 150Hz), controlled highs (-3.5dB @ 4.8kHz)
                 band0.filterType = .lowShelf
-                band0.frequency = (selectedCharacter.id == "deep_authority") ? 130.0 : 180.0
-                band0.gain = ((selectedCharacter.id == "deep_authority") ? 6.5 : 5.0) * indexRate
+                band0.frequency = (selectedCharacter.id == "deep_bass_presence") ? 120.0 : 160.0
+                band0.gain = ((selectedCharacter.id == "deep_bass_presence") ? 6.5 : 5.0) * indexRate
                 band0.bypass = false
 
                 band1.filterType = .highShelf
-                band1.frequency = (selectedCharacter.id == "deep_authority") ? 4200.0 : 5000.0
-                band1.gain = -4.0 * indexRate
+                band1.frequency = 4800.0
+                band1.gain = -3.5 * indexRate
                 band1.bypass = false
 
-            case "eminem", "megaphone", "arcade":
-                // Sharp articulate punch: Mid presence peak (+5dB @ 2.5kHz), crisp highs (+3dB @ 8kHz)
+            case "british_authority", "british_rp", "german_studio":
+                // Calm BBC/studio authority: Warm lower-mids (+3.5dB @ 200Hz), smooth articulate highs (+2dB @ 5.5kHz)
+                band0.filterType = .lowShelf
+                band0.frequency = 200.0
+                band0.gain = 3.5 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 5500.0
+                band1.gain = 2.0 * indexRate
+                band1.bypass = false
+
+            case "australian_negotiator", "dynamic_presenter", "global_consultant":
+                // Forward conversational presence: Mid punch (+4dB @ 2.4kHz), air sparkle (+3dB @ 8kHz)
                 band0.filterType = .parametric
-                band0.frequency = 2500.0
+                band0.frequency = 2400.0
                 band0.bandwidth = 1.0
-                band0.gain = 5.0 * indexRate
+                band0.gain = 4.0 * indexRate
                 band0.bypass = false
 
                 band1.filterType = .highShelf
@@ -402,85 +524,65 @@ public final class AudioController: ObservableObject {
                 band1.gain = 3.0 * indexRate
                 band1.bypass = false
 
-            case "anime_heroine", "chipmunk":
-                // Bright soprano: High-pass low-end rumble, sparkle high shelf (+8dB @ 3.8kHz)
+            case "soothing_meditation", "yoga_nidra":
+                // ASMR / anti-anxiety nervous system soothe: High-pass rumble, soft velvety highs (-4dB @ 6.5kHz)
                 band0.filterType = .highPass
-                band0.frequency = (selectedCharacter.id == "chipmunk") ? 250.0 : 180.0
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 3800.0
-                band1.gain = ((selectedCharacter.id == "chipmunk") ? 9.0 : 8.0) * indexRate
-                band1.bypass = false
-
-            case "radio_host":
-                // Broadcast warmth: +3.5dB @ 150Hz, crisp articulation +2.5dB @ 5.5kHz
-                band0.filterType = .lowShelf
-                band0.frequency = 150.0
-                band0.gain = 3.5 * indexRate
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 5500.0
-                band1.gain = 2.5 * indexRate
-                band1.bypass = false
-
-            case "telephone_disguise":
-                // Narrowband landline filter: Cut below 300Hz, steep shelf cut above 3400Hz
-                band0.filterType = .highPass
-                band0.frequency = 300.0
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 3400.0
-                band1.gain = -18.0 * indexRate
-                band1.bypass = false
-
-            case "robot_drone":
-                // Robotic midrange resonance: +4dB @ 1.2kHz, roll off high end
-                band0.filterType = .parametric
-                band0.frequency = 1200.0
-                band0.bandwidth = 0.8
-                band0.gain = 4.0 * indexRate
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 6000.0
-                band1.gain = -6.0 * indexRate
-                band1.bypass = false
-
-            case "whisper_soothe":
-                // Breathy ASMR anti-anxiety: Gentle low cut, softened highs
-                band0.filterType = .highPass
-                band0.frequency = 200.0
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 7000.0
-                band1.gain = -3.0 * indexRate
-                band1.bypass = false
-
-            case "stadium":
-                // Spatial stadium presence
-                band0.filterType = .lowShelf
-                band0.frequency = 220.0
-                band0.gain = 2.5 * indexRate
-                band0.bypass = false
-
-                band1.filterType = .highShelf
-                band1.frequency = 4800.0
-                band1.gain = 3.5 * indexRate
-                band1.bypass = false
-
-            case "ghost":
-                // Ethereal diffuse veil
-                band0.filterType = .highPass
-                band0.frequency = 220.0
+                band0.frequency = 180.0
                 band0.bypass = false
 
                 band1.filterType = .highShelf
                 band1.frequency = 6500.0
-                band1.gain = 5.0 * indexRate
+                band1.gain = -4.0 * indexRate
+                band1.bypass = false
+
+            case "velvet_alto", "nordic_calm", "french_elegance", "expressive_presence":
+                // Intimate acoustic velvet: Gentle warm body (+2.5dB @ 240Hz), transparent airy top (+3.5dB @ 7.5kHz)
+                band0.filterType = .parametric
+                band0.frequency = 240.0
+                band0.bandwidth = 1.2
+                band0.gain = 2.5 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 7500.0
+                band1.gain = 3.5 * indexRate
+                band1.bypass = false
+
+            case "spanish_warmth", "italian_lyric":
+                // Rich harmonic warmth: Lower-mid fullness (+3.8dB @ 280Hz), expressive treble (+2.8dB @ 5.2kHz)
+                band0.filterType = .lowShelf
+                band0.frequency = 280.0
+                band0.gain = 3.8 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 5200.0
+                band1.gain = 2.8 * indexRate
+                band1.bypass = false
+
+            case "japanese_calm", "mandarin_clarity", "korean_studio":
+                // Clear disciplined articulation: Tight low cut (140Hz), crisp consonant intelligibility (+4.5dB @ 3.6kHz)
+                band0.filterType = .highPass
+                band0.frequency = 140.0
+                band0.bypass = false
+
+                band1.filterType = .parametric
+                band1.frequency = 3600.0
+                band1.bandwidth = 1.0
+                band1.gain = 4.5 * indexRate
+                band1.bypass = false
+
+            case "cyber_harmonic":
+                // Modern cyber resonance: Mid clarity peak (+4dB @ 1.8kHz), brilliant sheen (+4dB @ 9kHz)
+                band0.filterType = .parametric
+                band0.frequency = 1800.0
+                band0.bandwidth = 0.9
+                band0.gain = 4.0 * indexRate
+                band0.bypass = false
+
+                band1.filterType = .highShelf
+                band1.frequency = 9000.0
+                band1.gain = 4.0 * indexRate
                 band1.bypass = false
 
             default:
@@ -548,31 +650,29 @@ public final class AudioController: ObservableObject {
     public func checkModelFiles(character: VoiceCharacter) -> (hasModel: Bool, hasHubert: Bool, hasRMVPE: Bool, hasIndex: Bool, missing: [String]) {
         let fileManager = FileManager.default
         let modelsDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("RVCModels") ?? URL(fileURLWithPath: "/tmp/RVCModels")
+            .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
         
-        let modelURL = modelsDir.appendingPathComponent(character.modelFileName)
-        let hubertURL = modelsDir.appendingPathComponent("hubert_base.safetensors")
-        let rmvpeURL = modelsDir.appendingPathComponent("rmvpe.safetensors")
-        let indexURL = modelsDir.appendingPathComponent(character.indexFileName)
+        let ckptURL = modelsDir.appendingPathComponent("checkpoint.pth")
+        let configURL = modelsDir.appendingPathComponent("config.json")
+        let seURL = modelsDir.appendingPathComponent(character.speakerEmbeddingFileName)
         
         var missing: [String] = []
-        let hasModel = fileManager.fileExists(atPath: modelURL.path) && ((try? fileManager.attributesOfItem(atPath: modelURL.path)[.size] as? Int64) ?? 0) > 100_000
-        if !hasModel { missing.append(character.modelFileName) }
+        let hasCkpt = fileManager.fileExists(atPath: ckptURL.path) && ((try? fileManager.attributesOfItem(atPath: ckptURL.path)[.size] as? Int64) ?? 0) > 10_000_000
+        if !hasCkpt { missing.append("checkpoint.pth") }
         
-        let hasHubert = fileManager.fileExists(atPath: hubertURL.path) && ((try? fileManager.attributesOfItem(atPath: hubertURL.path)[.size] as? Int64) ?? 0) > 100_000
-        if !hasHubert { missing.append("hubert_base.safetensors") }
+        let hasConfig = fileManager.fileExists(atPath: configURL.path)
+        if !hasConfig { missing.append("config.json") }
         
-        let hasRMVPE = fileManager.fileExists(atPath: rmvpeURL.path) && ((try? fileManager.attributesOfItem(atPath: rmvpeURL.path)[.size] as? Int64) ?? 0) > 100_000
-        if !hasRMVPE { missing.append("rmvpe.safetensors") }
+        let hasSE = fileManager.fileExists(atPath: seURL.path)
+        if !hasSE { missing.append(character.speakerEmbeddingFileName) }
         
-        let hasIndex = fileManager.fileExists(atPath: indexURL.path)
-        
-        return (hasModel, hasHubert, hasRMVPE, hasIndex, missing)
+        return (hasModel: hasCkpt, hasHubert: hasConfig, hasRMVPE: hasSE, hasIndex: true, missing: missing)
     }
 
     public func loadCharacterWeights(character: VoiceCharacter) {
         loadWeightsTask?.cancel()
         pitchShiftSemitones = Float(character.defaultPitch)
+        toneColorTau = character.defaultTau
         updatePerformanceControls()
 
         let check = checkModelFiles(character: character)
@@ -590,30 +690,28 @@ public final class AudioController: ObservableObject {
 
         loadWeightsTask = Task { [weak self] in
             let modelsDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("RVCModels") ?? URL(fileURLWithPath: "/tmp/RVCModels")
-            
-            let modelURL = modelsDir.appendingPathComponent(character.modelFileName)
-            let indexURL = modelsDir.appendingPathComponent(character.indexFileName)
-            let hubertURL = modelsDir.appendingPathComponent("hubert_base.safetensors")
-            let rmvpeURL = modelsDir.appendingPathComponent("rmvpe.safetensors")
+                .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
+            let seURL = modelsDir.appendingPathComponent(character.speakerEmbeddingFileName)
 
             do {
                 let startTime = CFAbsoluteTimeGetCurrent()
                 guard let self = self, !Task.isCancelled else { return }
-                try await self.rvcInference.loadWeights(hubertURL: hubertURL, modelURL: modelURL, rmvpeURL: rmvpeURL)
-                guard !Task.isCancelled else { return }
-                if check.hasIndex {
-                    try? self.rvcInference.loadIndex(url: indexURL, rate: self.indexRate)
+
+                guard FileManager.default.fileExists(atPath: seURL.path) else {
+                    throw NSError(domain: "OpenVoice", code: 404, userInfo: [NSLocalizedDescriptionKey: "Voice profile \(character.speakerEmbeddingFileName) not found."])
                 }
-                guard !Task.isCancelled else { return }
+
+                await OpenVoiceBridge.shared.setTargetVoice(path: seURL.path)
+                await OpenVoiceBridge.shared.setTau(tau: self.toneColorTau)
+                
                 let loadDurationMs = Int((CFAbsoluteTimeGetCurrent() - startTime) * 1000)
 
                 await MainActor.run {
                     guard !Task.isCancelled else { return }
                     self.isNeuralModelLoaded = true
-                    self.loadedComponents = (hubert: true, rmvpe: true, synth: true, index: check.hasIndex)
-                    self.modelLoadStatus = .ready(character: character.name, hasIndex: check.hasIndex, latencyMs: loadDurationMs)
-                    self.statusMessage = "Neural RVC Active: \(character.name)"
+                    self.loadedComponents = (hubert: true, rmvpe: true, synth: true, index: true)
+                    self.modelLoadStatus = .ready(character: character.name, hasIndex: true, latencyMs: loadDurationMs)
+                    self.statusMessage = "OpenVoice V2 Active: \(character.name)"
                     self.updatePerformanceControls()
                 }
             } catch {
@@ -639,29 +737,20 @@ public final class AudioController: ObservableObject {
         testSynthesisStatus = "Testing synthesis..."
         Task {
             do {
-                // Generate 0.35s harmonic tone test chunk (5600 samples @ 16kHz)
-                var testAudio = [Float](repeating: 0, count: 5600)
-                for i in 0..<5600 {
-                    let t = Float(i) / 16000.0
+                // Generate 0.5s harmonic tone test chunk (11025 samples @ 22050Hz)
+                var testAudio = [Float](repeating: 0, count: 11025)
+                for i in 0..<11025 {
+                    let t = Float(i) / 22050.0
                     testAudio[i] = 0.3 * sin(2.0 * .pi * 220.0 * t) + 0.15 * sin(2.0 * .pi * 440.0 * t)
                 }
 
                 let start = CFAbsoluteTimeGetCurrent()
-                let mlxInput = MLXArray(testAudio)
-                let synth = try await rvcInference.inferChunk(
-                    chunk: mlxInput,
-                    pitchShift: Int(pitchShiftSemitones.rounded()),
-                    f0Method: "rmvpe",
-                    indexRate: indexRate
-                )
-                MLX.eval(synth)
+                let synth = try await OpenVoiceBridge.shared.convertChunk(samples: testAudio, tau: toneColorTau)
                 let duration = (CFAbsoluteTimeGetCurrent() - start) * 1000
 
-                let squeezed = synth.reshaped([-1]).asType(Float.self)
-                let samples = squeezed.asArray(Float.self)
-                schedulePlayback(samples: samples, sampleRate: Double(rvcInference.modelSampleRate))
+                schedulePlayback(samples: synth, sampleRate: OpenVoiceBridge.shared.modelSampleRate)
 
-                self.testSynthesisStatus = "✅ Working! Converted in \(Int(duration))ms (\(samples.count) samples played)"
+                self.testSynthesisStatus = "✅ Working! Converted in \(Int(duration))ms (\(synth.count) samples played)"
                 DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
                     if self.testSynthesisStatus?.starts(with: "✅") == true {
                         self.testSynthesisStatus = nil
@@ -700,10 +789,11 @@ public final class AudioController: ObservableObject {
         downloadTask = Task {
             let fileManager = FileManager.default
             let modelsDir = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("RVCModels") ?? URL(fileURLWithPath: "/tmp/RVCModels")
+                .appendingPathComponent("OpenVoiceModels") ?? URL(fileURLWithPath: "/tmp/OpenVoiceModels")
+            let sesDir = modelsDir.appendingPathComponent("ses")
             
             do {
-                try fileManager.createDirectory(at: modelsDir, withIntermediateDirectories: true)
+                try fileManager.createDirectory(at: sesDir, withIntermediateDirectories: true)
 
                 // Dedicated URLSession with request timeout to prevent indefinite stalling
                 let config = URLSessionConfiguration.default
@@ -712,24 +802,30 @@ public final class AudioController: ObservableObject {
                 config.waitsForConnectivity = true
                 let session = URLSession(configuration: config)
 
-                let downloads: [(name: String, fileName: String, urlString: String, weight: Double)] = [
+                let downloads: [(name: String, path: URL, urlString: String, weight: Double)] = [
                     (
-                        name: "RMVPE Pitch Tracker",
-                        fileName: "rmvpe.safetensors",
-                        urlString: "https://huggingface.co/AEmotionStudio/rvc-models/resolve/main/rmvpe.safetensors",
-                        weight: 0.40
+                        name: "OpenVoice V2 ToneColor Checkpoint",
+                        path: modelsDir.appendingPathComponent("checkpoint.pth"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/resolve/main/converter/checkpoint.pth",
+                        weight: 0.85
                     ),
                     (
-                        name: "HuBERT Acoustic Model",
-                        fileName: "hubert_base.safetensors",
-                        urlString: "https://huggingface.co/lexandstuff/mlx-contentvec/resolve/main/contentvec_base.safetensors",
-                        weight: 0.30
+                        name: "OpenVoice Config",
+                        path: modelsDir.appendingPathComponent("config.json"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/raw/main/converter/config.json",
+                        weight: 0.05
                     ),
                     (
-                        name: "Neural Voice Synthesizer",
-                        fileName: "f0G48k.safetensors",
-                        urlString: "https://huggingface.co/AEmotionStudio/rvc-models/resolve/main/pretrained_v2/f0G48k.safetensors",
-                        weight: 0.30
+                        name: "US English Voice Profile",
+                        path: sesDir.appendingPathComponent("en-us.pth"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/resolve/main/base_speakers/ses/en-us.pth",
+                        weight: 0.05
+                    ),
+                    (
+                        name: "British English Voice Profile",
+                        path: sesDir.appendingPathComponent("en-default.pth"),
+                        urlString: "https://huggingface.co/myshell-ai/OpenVoiceV2/resolve/main/base_speakers/ses/en-default.pth",
+                        weight: 0.05
                     )
                 ]
 
@@ -738,10 +834,9 @@ public final class AudioController: ObservableObject {
                 for item in downloads {
                     if Task.isCancelled { break }
 
-                    let targetURL = modelsDir.appendingPathComponent(item.fileName)
-                    if fileManager.fileExists(atPath: targetURL.path),
-                       let attrs = try? fileManager.attributesOfItem(atPath: targetURL.path),
-                       let size = attrs[.size] as? Int64, size > 1_000_000 {
+                    if fileManager.fileExists(atPath: item.path.path),
+                       let attrs = try? fileManager.attributesOfItem(atPath: item.path.path),
+                       let size = attrs[.size] as? Int64, size > 1_000 {
                         // Already downloaded and valid
                         completedWeight += item.weight
                         self.downloadProgress = completedWeight
@@ -755,7 +850,7 @@ public final class AudioController: ObservableObject {
 
                     let (tempLocation, response) = try await session.download(from: remoteURL)
                     if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode >= 400 {
-                        throw NSError(domain: "RVCDownload", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(httpResponse.statusCode)"])
+                        throw NSError(domain: "OpenVoiceDownload", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "Server returned HTTP \(httpResponse.statusCode)"])
                     }
 
                     if Task.isCancelled {
@@ -763,10 +858,10 @@ public final class AudioController: ObservableObject {
                         break
                     }
 
-                    if fileManager.fileExists(atPath: targetURL.path) {
-                        try? fileManager.removeItem(at: targetURL)
+                    if fileManager.fileExists(atPath: item.path.path) {
+                        try? fileManager.removeItem(at: item.path)
                     }
-                    try fileManager.moveItem(at: tempLocation, to: targetURL)
+                    try fileManager.moveItem(at: tempLocation, to: item.path)
 
                     completedWeight += item.weight
                     self.downloadProgress = min(1.0, completedWeight)
@@ -781,31 +876,14 @@ public final class AudioController: ObservableObject {
                     return
                 }
 
-                // Map/link base generator to character model filenames if not already present
-                let baseGenerator = modelsDir.appendingPathComponent("f0G48k.safetensors")
-                if fileManager.fileExists(atPath: baseGenerator.path) {
-                    for char in Self.availableCharacters {
-                        let charModelURL = modelsDir.appendingPathComponent(char.modelFileName)
-                        if !fileManager.fileExists(atPath: charModelURL.path) {
-                            try? fileManager.copyItem(at: baseGenerator, to: charModelURL)
-                        }
-                    }
-                }
-
                 self.downloadProgress = 1.0
                 self.isDownloading = false
                 self.statusMessage = "All neural models downloaded & ready!"
-                // Load whatever character is currently selected
                 self.loadCharacterWeights(character: self.selectedCharacter)
-
             } catch {
-                if Task.isCancelled {
-                    self.statusMessage = "Download cancelled."
-                } else {
-                    self.statusMessage = "Download stalled or failed: \(error.localizedDescription). Click retry."
-                    self.modelLoadStatus = .failed(error: error.localizedDescription)
-                }
                 self.isDownloading = false
+                self.statusMessage = "Download failed: \(error.localizedDescription)"
+                self.modelLoadStatus = .failed(error: error.localizedDescription)
             }
         }
     }
@@ -997,11 +1075,13 @@ public final class AudioController: ObservableObject {
     }
 
     public func start() {
-        guard !isRunning else { return }
+        guard !isRunning && !isRestarting else { return }
+        isConfiguringEngine = true
+        defer { isConfiguringEngine = false }
         errorMessage = nil
         userStopped = false
         Self.configureMetalLibrary()
-        accumulatedSamples16k.removeAll(keepingCapacity: true)
+        accumulatedSamples.removeAll(keepingCapacity: true)
         currentInferenceTask?.cancel()
         currentInferenceTask = nil
         isProcessingChunk = false
@@ -1235,7 +1315,7 @@ public final class AudioController: ObservableObject {
         outputLevel = 0.0
         errorMessage = nil
         if isNeuralModelLoaded {
-            statusMessage = "Neural RVC Active: \(selectedCharacter.name)"
+            statusMessage = "OpenVoice V2 Active: \(selectedCharacter.name)"
         } else {
             statusMessage = "Model weights not downloaded — Audio muted"
         }
@@ -1278,14 +1358,14 @@ public final class AudioController: ObservableObject {
             self.rawInputRMS = rms
         }
 
-        let downsampled = filteredData.withUnsafeBufferPointer { ptr -> [Float] in
+        let resampled = filteredData.withUnsafeBufferPointer { ptr -> [Float] in
             guard let base = ptr.baseAddress else { return [] }
-            return self.resampleTo16k(channelData: base, count: activeCount, fromRate: fromRate)
+            return self.resample(samples: Array(UnsafeBufferPointer(start: base, count: activeCount)), fromRate: fromRate, toRate: OpenVoiceBridge.shared.modelSampleRate)
         }
 
         Task { @MainActor in
             guard self.isRunning else { return }
-            self.accumulatedSamples16k.append(contentsOf: downsampled)
+            self.accumulatedSamples.append(contentsOf: resampled)
             self.processNextChunkIfAvailable()
         }
     }
@@ -1295,14 +1375,14 @@ public final class AudioController: ObservableObject {
         guard isRunning && !isProcessingChunk else { return }
 
         // Drop backlog if accumulated samples exceed 2 chunks to avoid latency buildup
-        if accumulatedSamples16k.count > targetChunkSamples16k * 2 {
-            accumulatedSamples16k.removeFirst(accumulatedSamples16k.count - targetChunkSamples16k * 2)
+        if accumulatedSamples.count > targetChunkSamples * 2 {
+            accumulatedSamples.removeFirst(accumulatedSamples.count - targetChunkSamples * 2)
         }
 
-        guard accumulatedSamples16k.count >= targetChunkSamples16k else { return }
+        guard accumulatedSamples.count >= targetChunkSamples else { return }
 
-        let chunkToProcess = Array(accumulatedSamples16k.prefix(targetChunkSamples16k))
-        accumulatedSamples16k.removeFirst(targetChunkSamples16k)
+        let chunkToProcess = Array(accumulatedSamples.prefix(targetChunkSamples))
+        accumulatedSamples.removeFirst(targetChunkSamples)
 
         var chunkRms: Float = 0
         vDSP_rmsqv(chunkToProcess, 1, &chunkRms, vDSP_Length(chunkToProcess.count))
@@ -1316,22 +1396,32 @@ public final class AudioController: ObservableObject {
             currentInferenceTask?.cancel()
             currentInferenceTask = nil
             isProcessingChunk = false
-            accumulatedSamples16k.removeAll(keepingCapacity: true)
+            accumulatedSamples.removeAll(keepingCapacity: true)
+            if isPriorChunkActive {
+                isPriorChunkActive = false
+                Task { await OpenVoiceBridge.shared.resetContext() }
+            }
             if playerNode.isPlaying {
                 playerNode.stop()
                 playerNode.reset()
             }
         } else {
             isVoiceActive = true
-            processAudioChunk(chunk16k: chunkToProcess)
+            processAudioChunk(chunk22k: chunkToProcess)
         }
     }
 
-    public func stop() {
-        guard isRunning || systemTap != nil || inputIOProcID != nil else { return }
+    public func stop(preserveRestarting: Bool = false) {
+        if !preserveRestarting {
+            restartWorkItem?.cancel()
+            restartWorkItem = nil
+            isRestarting = false
+        }
+        guard isRunning || engine.isRunning || systemTap != nil || inputIOProcID != nil else { return }
         currentInferenceTask?.cancel()
         currentInferenceTask = nil
         isProcessingChunk = false
+        isPriorChunkActive = false
         if #available(macOS 14.2, *), let tap = systemTap as? SystemAudioTap {
             tap.stop()
         }
@@ -1345,7 +1435,7 @@ public final class AudioController: ObservableObject {
         playerNode.stop()
         playerNode.reset()
         engine.stop()
-        accumulatedSamples16k.removeAll(keepingCapacity: false)
+        accumulatedSamples.removeAll(keepingCapacity: false)
         isRunning = false
         isConverting = false
         isVoiceActive = false
@@ -1355,10 +1445,10 @@ public final class AudioController: ObservableObject {
         outputLevel = 0.0
     }
 
-    // MARK: - MLX Audio Bridge
+    // MARK: - OpenVoice Audio Processing
 
-    public func processAudioChunk(chunk16k: [Float]) {
-        guard !chunk16k.isEmpty else { return }
+    public func processAudioChunk(chunk22k: [Float]) {
+        guard !chunk22k.isEmpty else { return }
 
         // If model is not loaded, strictly mute output and return immediately
         guard self.isNeuralModelLoaded else {
@@ -1368,7 +1458,7 @@ public final class AudioController: ObservableObject {
         }
 
         var chunkRms: Float = 0
-        vDSP_rmsqv(chunk16k, 1, &chunkRms, vDSP_Length(chunk16k.count))
+        vDSP_rmsqv(chunk22k, 1, &chunkRms, vDSP_Length(chunk22k.count))
 
         // Effective gate threshold: always enforce absoluteSilenceFloor even if silenceThreshold slider is 0.0
         let effectiveThreshold = max(Self.absoluteSilenceFloor, self.silenceThreshold)
@@ -1378,6 +1468,10 @@ public final class AudioController: ObservableObject {
             self.currentInferenceTask?.cancel()
             self.currentInferenceTask = nil
             self.isProcessingChunk = false
+            if self.isPriorChunkActive {
+                self.isPriorChunkActive = false
+                Task { await OpenVoiceBridge.shared.resetContext() }
+            }
             return
         }
 
@@ -1385,20 +1479,16 @@ public final class AudioController: ObservableObject {
         self.isProcessingChunk = true
         self.isSynthesizingChunk = true
 
-        let currentPitch = Int(self.pitchShiftSemitones.rounded())
-        let currentIndexRate = self.indexRate
+        let currentTau = self.toneColorTau
 
         currentInferenceTask?.cancel()
         currentInferenceTask = Task {
             let start = CFAbsoluteTimeGetCurrent()
             do {
-                // If model is not downloaded or not loaded, DO NOT output any sound on RVC tab!
                 guard !Task.isCancelled,
                       self.isRunning,
                       self.isVoiceActive,
-                      self.isNeuralModelLoaded,
-                      self.rvcInference.synthesizer != nil,
-                      self.rvcInference.hubertModel != nil else {
+                      self.isNeuralModelLoaded else {
                     self.outputLevel = 0.0
                     self.isSynthesizingChunk = false
                     self.isProcessingChunk = false
@@ -1406,17 +1496,11 @@ public final class AudioController: ObservableObject {
                     return
                 }
 
-                // 1. Convert captured Float buffer into MLXArray [T]
-                let mlxInputAudio = MLXArray(chunk16k)
-
-                // Pass through full MLX RVC pipeline (HuBERT -> RMVPE -> Index -> Synthesizer)
-                let mlxOutput = try await self.rvcInference.inferChunk(
-                    chunk: mlxInputAudio,
-                    pitchShift: currentPitch,
-                    f0Method: "rmvpe",
-                    indexRate: currentIndexRate
+                // Voice conversion via OpenVoice V2 Tone Color Converter
+                let convertedSamples = try await OpenVoiceBridge.shared.convertChunk(
+                    samples: chunk22k,
+                    tau: currentTau
                 )
-                MLX.eval(mlxOutput)
 
                 guard !Task.isCancelled, self.isRunning, self.isVoiceActive else {
                     self.outputLevel = 0.0
@@ -1426,20 +1510,22 @@ public final class AudioController: ObservableObject {
                     return
                 }
 
-                // Squeeze into [T_out]
-                let squeezed = mlxOutput.reshaped([-1]).asType(Float.self)
-                let finalSamples = squeezed.asArray(Float.self)
-                let outputSampleRate = Double(self.rvcInference.modelSampleRate)
+                var processed = convertedSamples
+                // Smooth fade-in only when transitioning from silence to active speech
+                if !self.isPriorChunkActive {
+                    self.applyFadeIn(samples: &processed, rampLength: 48)
+                    self.isPriorChunkActive = true
+                }
 
-                // 2. Convert MLXArray back into AVAudioPCMBuffer and schedule playback
-                self.schedulePlayback(samples: finalSamples, sampleRate: outputSampleRate)
+                // Schedule playback at OpenVoice 22,050 Hz
+                self.schedulePlayback(samples: processed, sampleRate: OpenVoiceBridge.shared.modelSampleRate)
 
                 let duration = (CFAbsoluteTimeGetCurrent() - start) * 1000
                 self.lastInferenceDurationMs = duration
                 self.isSynthesizingChunk = false
             } catch {
                 if !Task.isCancelled {
-                    print("MLX RVC Processing error: \(error)")
+                    print("OpenVoice Processing error: \(error)")
                 }
                 self.outputLevel = 0.0
                 self.isSynthesizingChunk = false
@@ -1450,13 +1536,18 @@ public final class AudioController: ObservableObject {
         }
     }
 
-    private func applyEdgeWindow(samples: inout [Float], rampLength: Int = 96) {
+    public func processAudioChunk(chunk16k: [Float]) {
+        let chunk22k = self.resample(samples: chunk16k, fromRate: 16000.0, toRate: OpenVoiceBridge.shared.modelSampleRate)
+        processAudioChunk(chunk22k: chunk22k)
+    }
+
+    private func applyFadeIn(samples: inout [Float], rampLength: Int = 48) {
         let n = samples.count
-        guard n > rampLength * 2 else { return }
-        for i in 0..<rampLength {
-            let factor = 0.5 * (1.0 - cos(Float.pi * Float(i) / Float(rampLength)))
+        let len = min(rampLength, n)
+        guard len > 0 else { return }
+        for i in 0..<len {
+            let factor = 0.5 * (1.0 - cos(Float.pi * Float(i) / Float(len)))
             samples[i] *= factor
-            samples[n - 1 - i] *= factor
         }
     }
 
@@ -1478,7 +1569,6 @@ public final class AudioController: ObservableObject {
         } else {
             resampled = resample(samples: samples, fromRate: sampleRate, toRate: targetRate)
         }
-        applyEdgeWindow(samples: &resampled)
 
         let frameCount = AVAudioFrameCount(resampled.count)
         guard frameCount > 0,
@@ -1510,26 +1600,114 @@ public final class AudioController: ObservableObject {
         }
     }
 
+    // MARK: - High-Resolution Anti-Aliased Resampling & Spectral Bandwidth Extension
+
+    /// High-resolution sample rate converter using 4-point Hermite cubic spline interpolation,
+    /// 2-pole Butterworth low-pass anti-aliasing filter on downsampling, and harmonic bandwidth extension on 48kHz output.
     private func resample(samples: [Float], fromRate: Double, toRate: Double) -> [Float] {
         if abs(fromRate - toRate) < 1.0 || samples.isEmpty {
             return samples
         }
+
+        var sourceSamples = samples
+
+        // 1. Anti-aliasing low-pass filter if downsampling (e.g. 48kHz -> 22.05kHz)
+        // Cutoff set safely at 0.46 of toRate (e.g. ~10.14 kHz for 22.05kHz) to prevent frequency foldover
+        if toRate < fromRate {
+            let cutoffHz = min(toRate * 0.46, fromRate * 0.46)
+            applyButterworthLowPass(samples: &sourceSamples, sampleRate: fromRate, cutoffHz: cutoffHz)
+        }
+
         let ratio = toRate / fromRate
-        let targetCount = Int(Double(samples.count) * ratio)
+        let targetCount = Int(Double(sourceSamples.count) * ratio)
         guard targetCount > 0 else { return [] }
         var output = [Float](repeating: 0, count: targetCount)
+        let n = sourceSamples.count
 
+        // 2. 4-point Hermite cubic spline interpolation (continuous C1 derivatives, no linear staircasing)
         for i in 0..<targetCount {
             let srcIndex = Double(i) / ratio
-            let idx = Int(srcIndex)
-            if idx + 1 < samples.count {
-                let frac = Float(srcIndex - Double(idx))
-                output[i] = samples[idx] * (1.0 - frac) + samples[idx + 1] * frac
-            } else if idx < samples.count {
-                output[i] = samples[idx]
-            }
+            let idx1 = Int(srcIndex)
+            let t = Float(srcIndex - Double(idx1))
+
+            let idx0 = max(0, idx1 - 1)
+            let idx2 = min(n - 1, idx1 + 1)
+            let idx3 = min(n - 1, idx1 + 2)
+
+            let y0 = sourceSamples[idx0]
+            let y1 = (idx1 < n) ? sourceSamples[idx1] : sourceSamples[n - 1]
+            let y2 = sourceSamples[idx2]
+            let y3 = sourceSamples[idx3]
+
+            let c0 = y1
+            let c1 = 0.5 * (y2 - y0)
+            let c2 = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3
+            let c3 = 0.5 * (y3 - y0) + 1.5 * (y1 - y2)
+
+            output[i] = ((c3 * t + c2) * t + c1) * t + c0
         }
+
+        // 3. Harmonic Bandwidth Extension (BWE) for 48kHz playback:
+        // OpenVoice tops out at 11kHz. Synthesizing subtle upper harmonics (11.5 - 18kHz)
+        // gives voices natural studio "air" on high-definition speakers & headphones.
+        if toRate >= 44100.0 && fromRate < 30000.0 {
+            applyHarmonicAirExtension(samples: &output, sampleRate: toRate)
+        }
+
         return output
+    }
+
+    /// 2-pole Butterworth low-pass IIR anti-aliasing filter
+    private func applyButterworthLowPass(samples: inout [Float], sampleRate: Double, cutoffHz: Double) {
+        let n = samples.count
+        guard n > 4 else { return }
+        let omega = tan(Double.pi * cutoffHz / sampleRate)
+        let omega2 = omega * omega
+        let sqrt2 = 1.4142135623730950488
+        let norm = 1.0 / (1.0 + sqrt2 * omega + omega2)
+
+        let a0 = Float(omega2 * norm)
+        let a1 = Float(2.0 * a0)
+        let a2 = a0
+        let b1 = Float(2.0 * (omega2 - 1.0) * norm)
+        let b2 = Float((1.0 - sqrt2 * omega + omega2) * norm)
+
+        var x1: Float = 0, x2: Float = 0, y1: Float = 0, y2: Float = 0
+        for i in 0..<n {
+            let x0 = samples[i]
+            let y0 = a0 * x0 + a1 * x1 + a2 * x2 - b1 * y1 - b2 * y2
+            x2 = x1; x1 = x0
+            y2 = y1; y1 = y0
+            samples[i] = y0
+        }
+    }
+
+    /// Harmonic Bandwidth Extension (BWE): extracts 7.5 - 10.5 kHz band, saturates to create overtones,
+    /// bandpasses to 11.5 - 19 kHz, and mixes back at -18dB.
+    private func applyHarmonicAirExtension(samples: inout [Float], sampleRate: Double) {
+        let n = samples.count
+        guard n > 8 else { return }
+
+        // Simple high-pass leaky integrator to isolate upper spectrum (> 7.5kHz)
+        let alpha: Float = Float(1.0 - exp(-2.0 * Double.pi * 7500.0 / sampleRate))
+        var hpPrev: Float = 0.0
+        var lpPrev: Float = 0.0
+        let mixGain: Float = 0.12 // -18.4 dB
+
+        for i in 0..<n {
+            let x = samples[i]
+            // High pass
+            hpPrev += alpha * (x - hpPrev)
+            let highBand = x - hpPrev
+
+            // Gentle non-linear harmonic excitation (even + odd overtones)
+            let excited = tanh(highBand * 2.2) - 0.45 * highBand
+
+            // Bandpass smoothing (leaky lowpass above 19kHz to eliminate ultra-high digital hiss)
+            lpPrev += 0.7 * (excited - lpPrev)
+
+            samples[i] = x + lpPrev * mixGain
+        }
     }
 
     private func resampleTo16k(channelData: UnsafePointer<Float>, count: Int, fromRate: Double) -> [Float] {

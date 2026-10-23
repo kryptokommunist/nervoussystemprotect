@@ -1,6 +1,7 @@
 .DS_Store
 .build/
 *.app/
+/nervoussystemprotect
 *.xcodeproj/
 *.xcworkspace/
 *.mp3
@@ -11,5 +12,11 @@
 *.bin
 *.tar.gz
 *.zip
+*.dmg
+*.sha256
+checksums.txt
+releases/
 .system_generated/
 tmp/
+__pycache__/
+*.pyc
